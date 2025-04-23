@@ -172,8 +172,27 @@ const Products = () => {
   return (
     <div className="flex flex-col h-full"> {/* Ensure parent container allows flex-grow */}
 
+    {/* Category Tabs Section - Fixed at the bottom */}
+    <div className="px-2 bg-neutral-900">
+         <div className="flex justify-left space-x-4">
+           {categories.map((category) => (
+             <button
+               key={category}
+               onClick={() => setSelectedCategory(category)}
+               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                 selectedCategory === category
+                   ? 'bg-indigo-600 text-white'
+                   : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+               }`}
+             >
+               {category}
+             </button>
+           ))}
+         </div>
+       </div>
+
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex-grow grid grid-cols-1 px-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 py-6 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
+      <div className="flex-grow grid grid-cols-1 px-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 py-4 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
         {filteredProducts.map((product) => (
           <div
             key={product.id}
@@ -218,24 +237,7 @@ const Products = () => {
          )}
       </div>
 
-       {/* Category Tabs Section - Fixed at the bottom */}
-       <div className="px-2 py-3 bg-neutral-900 bottom-0">
-         <div className="flex justify-left space-x-4">
-           {categories.map((category) => (
-             <button
-               key={category}
-               onClick={() => setSelectedCategory(category)}
-               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                 selectedCategory === category
-                   ? 'bg-indigo-600 text-white'
-                   : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-               }`}
-             >
-               {category}
-             </button>
-           ))}
-         </div>
-       </div>
+       
 
       {/* Conditionally render the modal */}
       {isSizeModalOpen && selectedCoffee && (
