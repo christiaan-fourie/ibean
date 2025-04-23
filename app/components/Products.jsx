@@ -173,15 +173,15 @@ const Products = () => {
     <div className="flex flex-col h-full"> {/* Ensure parent container allows flex-grow */}
 
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex-grow grid grid-cols-1 px-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 py-6 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted max-h, flex-grow */}
+      <div className="flex-grow grid grid-cols-1 px-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 py-6 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
         {filteredProducts.map((product) => (
           <div
             key={product.id}
-            className="bg-neutral-800 border border-gray-700 rounded-lg p-6 hover:shadow-xl hover:scale-105 transition-transform duration-300 flex flex-col justify-between"
+            className="bg-neutral-800 border border-gray-700 rounded-lg p-4 hover:shadow-xl hover:scale-105 transition-transform duration-300 flex flex-col justify-between"
           >
             {/* Content grouped for flex layout */}
             <div>
-                <h3 className="text-lg font-semibold text-neutral-50 mb-2 text-center">
+                <h3 className="text-base font-semibold text-neutral-50 mb-1 text-center">
                 {product.name}
                 </h3>
 
@@ -189,7 +189,7 @@ const Products = () => {
                 {product.category === 'Coffee' && product.sizes ? (
                      <p className="text-sm text-center text-indigo-400 mb-4">(Select Size)</p>
                  ) : product.price !== undefined ? (
-                    <p className="text-md font-bold text-green-400 mb-4 text-center">
+                    <p className="text-sm font-bold text-green-400 mb-2 text-center">
                     R {safeFormatPrice(product.price)}
                     </p>
                  ) : (
@@ -197,15 +197,13 @@ const Products = () => {
                  )
                 }
 
-                <p className="text-sm text-gray-400 text-center mb-4">
-                {product.description || 'No description available.'}
-                </p>
+                {/* <p className="text-sm text-gray-400 text-center mb-2"> {product.description || 'No description available.'} </p> */}
             </div>
 
             {/* Button always at the bottom */}
             <button
               onClick={() => handleProductClick(product)} // Use the new handler
-              className="mt-auto bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition-colors w-full" // mt-auto pushes button down
+              className="mt-auto bg-indigo-600 text-white py-1.5 px-3 text-sm rounded-md hover:bg-indigo-700 transition-colors w-full" // Adjusted padding, font size
             >
               {/* Change button text based on category */}
               {product.category === 'Coffee' && product.sizes ? 'Select Size' : 'Add to Order'}
