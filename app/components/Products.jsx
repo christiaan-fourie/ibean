@@ -177,7 +177,7 @@ const Products = () => {
         {filteredProducts.map((product) => (
           <div
             key={product.id}
-            className="bg-neutral-800 border border-gray-700 rounded-lg p-4 hover:shadow-xl hover:scale-105 transition-transform duration-300 flex flex-col justify-between"
+            className="h-[160px] flex flex-col justify-between bg-neutral-800 border border-gray-700 rounded-lg p-4 hover:shadow-xl hover:scale-105 transition-transform duration-300"
           >
             {/* Content grouped for flex layout */}
             <div>
