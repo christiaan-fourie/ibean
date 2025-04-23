@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation'; // Import for redirection
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../utils/firebase'; // Adjust the path to your firebase config file
+import Image from 'next/image'; // Import the Image component
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -42,7 +43,19 @@ const Login = () => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
       <div className="w-full max-w-md p-8 space-y-6 bg-neutral-800 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-center">Login</h2>
+        <div className='flex items-center justify-left'>
+          <div className="flex justify-center">
+            <Image
+              src="/logo.png" // Path relative to the public directory
+              alt="Your Company Logo"
+              width={180} // Adjust width as needed
+              height={60} // Adjust height as needed
+              priority // Prioritize loading the logo
+            />
+          </div>
+          <h2 className="text-2xl font-bold text-center">Login</h2>
+        </div>
+        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label
