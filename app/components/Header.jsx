@@ -4,9 +4,6 @@ import Image from 'next/image';
 import Menu from './Menu';
 import { useState, useEffect } from 'react';
 
-
-
-
 export default function Header() {
 
     return (
@@ -19,7 +16,6 @@ export default function Header() {
                 <Image src="/logo.png" alt="Logo" width={130} height={50} />
             </h1>
 
-            
         </header>
     );
 }

@@ -1,20 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FaBars } from 'react-icons/fa';
+import { FaBars, FaLock } from 'react-icons/fa'; // Added FaLock here
 import { CgClose } from "react-icons/cg";
 import ManageProducts from './ManageProducts'; // Import the ManageProducts component
 import Sales from './Sales'; // Import the Sales component
+import Refunds from './Refunds'; // *** Import the new Refunds component ***
 import { auth } from '../../utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
-import { FaLock } from 'react-icons/fa';
+// Removed duplicate FaLock import
 
 const Menu = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isManageProductsOpen, setIsManageProductsOpen] = useState(false); // State to control ManageProducts popup
-  const [isSalesOpen, setIsSalesOpen] = useState(false); // State to control Sales popup
-  
+  const [isManageProductsOpen, setIsManageProductsOpen] = useState(false);
+  const [isSalesOpen, setIsSalesOpen] = useState(false);
+  const [isRefundsOpen, setIsRefundsOpen] = useState(false); // *** State for Refunds popup ***
+
   const [user, setUser] = useState(null);
   const [showConfirmLogout, setShowConfirmLogout] = useState(false);
 
@@ -42,7 +44,7 @@ const Menu = () => {
         <FaBars className="" />
       </button>
 
-      {/* Backdrop for blur and click-outside-to-close */}
+      {/* Backdrop */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/30 backdrop-blur-sm z-20"
@@ -66,19 +68,32 @@ const Menu = () => {
             <li>
               <button
                 onClick={() => {
-                  setIsSalesOpen(true); // Open Sales popup
-                  toggleMenu(); // Close the menu
+                  setIsSalesOpen(true);
+                  toggleMenu();
                 }}
                 className="w-full text-left bg-neutral-700 text-white py-1.5 px-3 text-sm rounded-md hover:bg-neutral-600 transition-colors"
               >
                 Sales
               </button>
-            </li>  
+            </li>
+            {/* *** Add Refunds Button *** */}
             <li>
               <button
                 onClick={() => {
-                  setIsManageProductsOpen(true); // Open ManageProducts popup
+                  setIsRefundsOpen(true); // Open Refunds popup
                   toggleMenu(); // Close the menu
+                }}
+                className="w-full text-left bg-neutral-700 text-white py-1.5 px-3 text-sm rounded-md hover:bg-neutral-600 transition-colors"
+              >
+                Refunds
+              </button>
+            </li>
+            {/* ************************* */}
+            <li>
+              <button
+                onClick={() => {
+                  setIsManageProductsOpen(true);
+                  toggleMenu();
                 }}
                 className="w-full text-left bg-neutral-700 text-white py-1.5 px-3 text-sm rounded-md hover:bg-neutral-600 transition-colors"
               >
@@ -86,22 +101,17 @@ const Menu = () => {
               </button>
             </li>
             <li>
-              {/* Login/Logout Button */}
-            <button 
+              <button
                 className="flex items-center gap-2 bg-neutral-700 text-white py-1.5 px-3 text-sm rounded-md hover:bg-neutral-600 transition-colors w-full text-left"
                 onClick={() => {
                     setShowConfirmLogout(true)
                 }}
-            >   
-                {/* Display the username if the user is logged in */}
+              >
                 {user && (
-                    <span className="text-white">{user.email}</span>
+                    <span className="text-white truncate">{user.email}</span> // Added truncate
                 )}
-
-                <FaLock className="" />
-
+                <FaLock className="ml-auto flex-shrink-0" /> {/* Ensure icon stays right */}
             </button>
-
             </li>
           </ul>
         </div>
@@ -115,7 +125,13 @@ const Menu = () => {
       {isSalesOpen && (
         <Sales onClose={() => setIsSalesOpen(false)} />
       )}
+      {/* *** Refunds Popup *** */}
+      {isRefundsOpen && (
+        <Refunds onClose={() => setIsRefundsOpen(false)} />
+      )}
+      {/* ********************* */}
 
+      {/* Logout Confirmation */}
       {showConfirmLogout &&
           <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm z-50">
               <div className="bg-neutral-800 p-6 rounded-lg shadow-lg w-full max-w-sm">
@@ -127,10 +143,9 @@ const Menu = () => {
                         onClick={() => {
                             signOut(auth);
                             setShowConfirmLogout(false);
-                            setIsOpen(false);
+                            setIsOpen(false); // Close menu on logout
                         }}>Logout
                         </button>
-                      {/* Cancel button */}
                       <button
                         className="bg-neutral-600 text-white py-1.5 px-4 text-sm rounded-md hover:bg-neutral-700 transition-colors w-full"
                         onClick={() => setShowConfirmLogout(false)}
