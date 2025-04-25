@@ -192,7 +192,7 @@ const Products = () => {
        </div>
 
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex-grow grid grid-cols-1 px-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 py-4 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
+      <div className="flex-grow grid grid-cols-1 px-2 mt-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 py-4 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
         {filteredProducts.map((product) => (
           <div
             key={product.id}
