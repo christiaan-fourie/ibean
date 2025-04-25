@@ -6,11 +6,13 @@ import { FaCheckCircle } from 'react-icons/fa';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { auth } from '../../utils/firebase'; // Adjust path if needed
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { useStore } from '../context/StoreContext';
 
 // Component receives order details, total price, and a close handler
 const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
   const db = getFirestore(); // Get Firestore instance
   const [user] = useAuthState(auth); // Get current user
+  const { selectedStore } = useStore(); // Get selected store from context
 
   if (!orderDetails || orderDetails.length === 0) {
     return null; // Don't render if there's no order
@@ -25,10 +27,8 @@ const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
       return;
     }
 
-    try {
-      const salesCollectionRef = collection(db, 'sales');
-      await addDoc(salesCollectionRef, {
-        timestamp: serverTimestamp(), // Use Firestore server timestamp
+    const saleData = {
+      timestamp: serverTimestamp(), // Use Firestore server timestamp
         userId: user.uid, // Store user ID
         username: user.displayName || user.email, // Store username or email
         items: orderDetails.map(item => ({ // Store relevant item details
@@ -37,9 +37,16 @@ const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
           quantity: item.quantity,
           price: parseFloat(String(item.price).replace('R', '') || 0) // Store price as number
         })),
-        totalPrice: parseFloat(String(totalPrice).replace('R', '') || 0), // Store total price as number
-      });
+      totalPrice: parseFloat(String(totalPrice).replace('R', '') || 0), // Store total price as number
+      storeName: selectedStore, // *** Add the selected store name ***
+    };
 
+    try {
+      const salesCollectionRef = collection(db, 'sales');
+
+      await addDoc(salesCollectionRef, saleData);
+
+      
       console.log("Sale recorded successfully!");
       localStorage.removeItem('orderDetails'); // Clear order details from local storage
       window.location.reload(); // Refresh the page to update the order list

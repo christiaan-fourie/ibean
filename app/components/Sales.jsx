@@ -7,6 +7,8 @@ import { auth } from '../../utils/firebase'; // Adjust path if needed
 import { useAuthState } from 'react-firebase-hooks/auth';
 import jsPDF from 'jspdf'; // Import jsPDF
 import autoTable from 'jspdf-autotable'; // Import jspdf-autotable
+import { useStore } from '../context/StoreContext';
+
 
 // Helper function to get the start of a day in UTC
 const getUtcMidnight = (date) => {
@@ -23,6 +25,8 @@ const Sales = ({ onClose }) => {
   const db = getFirestore();
   const [user] = useAuthState(auth);
   const dateInputRef = useRef(null);
+  const { selectedStore, availableStores } = useStore(); 
+  const [isExportingMonthly, setIsExportingMonthly] = useState(false);
 
   // Function to format date display based on UTC components
   const formatDateDisplay = (date) => {
@@ -47,12 +51,22 @@ const Sales = ({ onClose }) => {
   };
 
   useEffect(() => {
-    const fetchDataForDate = async () => { // Renamed function for clarity
+      const fetchDataForDate = async (dateToFetch, storeName) => { // Renamed function for clarity
+    
+      
+      if (!storeName) {
+        setError("No store selected.");
+        setIsLoading(false);
+        setDailySales([]);
+        setDailyRefunds([]);
+        return;
+      }
       setIsLoading(true);
       setError(null);
       setDailySales([]);
-      setDailyRefunds([]); // *** Clear previous refunds ***
-
+      setDailyRefunds([]);
+      
+      // 
       try {
         // --- Define Time Range ---
         const startOfDay = new Date(selectedDate); // Copy the UTC date
@@ -61,52 +75,59 @@ const Sales = ({ onClose }) => {
         const startTimestamp = Timestamp.fromDate(startOfDay);
         const endTimestamp = Timestamp.fromDate(endOfDay);
 
-        // --- Fetch Sales ---
+        // --- Fetch Sales for selected store ---
         const salesCollectionRef = collection(db, 'sales');
         const salesQuery = query(
           salesCollectionRef,
+          where('storeName', '==', storeName), // *** Filter by storeName ***
           where('timestamp', '>=', startTimestamp),
           where('timestamp', '<=', endTimestamp),
           orderBy('timestamp', 'desc')
         );
         const salesSnapshot = await getDocs(salesQuery);
-        const salesData = salesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          totalPrice: typeof doc.data().totalPrice === 'number' ? doc.data().totalPrice : parseFloat(String(doc.data().totalPrice).replace(/[^\d.-]/g, '') || 0),
-          items: Array.isArray(doc.data().items) ? doc.data().items : [],
-          timestamp: doc.data().timestamp.toDate(),
-        }));
+        const salesData = salesSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+              id: doc.id,
+              ...data,
+              timestamp: data.timestamp ? data.timestamp.toDate() : undefined, // Convert to Date
+              totalPrice: typeof data.totalPrice === 'number' ? data.totalPrice : parseFloat(String(data.totalPrice).replace(/[^\d.-]/g, '') || 0),
+              items: Array.isArray(data.items) ? data.items : [],
+          };
+        });
         setDailySales(salesData);
 
-        // --- Fetch Refunds ---
-        const refundsCollectionRef = collection(db, 'refunds'); // *** Use 'refunds' collection ***
+        // --- Fetch Refunds for selected store ---
+        const refundsCollectionRef = collection(db, 'refunds');
         const refundsQuery = query(
-          refundsCollectionRef,
-          where('timestamp', '>=', startTimestamp),
-          where('timestamp', '<=', endTimestamp),
-          orderBy('timestamp', 'desc') // Order refunds as well
+            refundsCollectionRef,
+            where('storeName', '==', storeName), // *** Filter by storeName ***
+            where('timestamp', '>=', startTimestamp),
+            where('timestamp', '<=', endTimestamp),
+            orderBy('timestamp', 'desc')
         );
         const refundsSnapshot = await getDocs(refundsQuery);
-        const refundsData = refundsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          // Ensure amount is a number when fetching
-          amount: typeof doc.data().amount === 'number' ? doc.data().amount : parseFloat(String(doc.data().amount).replace(/[^\d.-]/g, '') || 0),
-          timestamp: doc.data().timestamp.toDate(),
-        }));
-        setDailyRefunds(refundsData); // *** Set refund state ***
+        const refundsData = refundsSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+              id: doc.id,
+              ...data,
+              timestamp: data.timestamp ? data.timestamp.toDate() : undefined, // Convert to Date
+              amount: typeof data.amount === 'number' ? data.amount : parseFloat(String(data.amount).replace(/[^\d.-]/g, '') || 0),
+          };
+        });
+          setDailyRefunds(refundsData);
+          } catch (err) {
+            console.error("Error fetching daily data:", err);
+            setError(`Failed to load data for ${formatDateDisplay(selectedDate)}. Please check console and try again.`);
+          } finally {
+            setIsLoading(false);
+          }
+      };
 
-      } catch (err) {
-        console.error("Error fetching daily data:", err);
-        setError(`Failed to load data for ${formatDateDisplay(selectedDate)}. Please check console and try again.`);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    fetchDataForDate(selectedDate, selectedStore);// Call the combined fetch function
+  }, [db, selectedDate, selectedStore]); // Updated selectStore dependency
 
-    fetchDataForDate(); // Call the combined fetch function
-  }, [db, selectedDate]); // Dependencies remain the same
 
   // Calculate sales summary statistics using useMemo
   const salesStats = useMemo(() => {
@@ -173,26 +194,21 @@ const Sales = ({ onClose }) => {
   };
 
   // Function to generate and download PDF with stats including refunds
-  const handleExportPdf = () => {
+  const handleExportDailyPdf = () => {
     // Allow export even if only refunds exist for the day
     if (dailySales.length === 0 && dailyRefunds.length === 0) return;
 
     const doc = new jsPDF();
-    const {
-        totalSalesValue,
-        totalNumberOfSales,
-        totalItemsSoldCount,
-        averageSaleValue,
-        itemSummary
-    } = salesStats;
-    const { totalRefundsValue, totalNumberOfRefunds } = refundStats; // *** Get refund stats ***
-    const netSalesValue = totalSalesValue - totalRefundsValue; // *** Calculate Net Sales ***
+    const { totalSalesValue, totalNumberOfSales, totalItemsSoldCount, averageSaleValue, itemSummary } = salesStats;
+    const { totalRefundsValue, totalNumberOfRefunds } = refundStats;
+    const netSalesValue = totalSalesValue - totalRefundsValue;
 
-    // --- PDF Title ---
+
+    // --- PDF Title (Include Store Name) ---
     doc.setFontSize(18);
-    doc.text(`Daily Report: ${formatDateDisplay(selectedDate)}`, 14, 22);
+    doc.text(`Daily Report: ${selectedStore} - ${formatDateDisplay(selectedDate)}`, 14, 22); // Added store
     doc.setFontSize(11);
-    let currentY = 30; // Start position for content
+    let currentY = 30;
 
     // --- Sales Table ---
     if (dailySales.length > 0) {
@@ -326,21 +342,188 @@ const Sales = ({ onClose }) => {
     doc.save(`DailyReport_${getInputValue(selectedDate)}.pdf`);
   };
 
+  // *** NEW Function: Generate and download Monthly PDF for ALL Stores ***
+  const handleExportMonthlyPdfAllStores = async () => {
+    setIsExportingMonthly(true);
+    setError(null); // Clear previous errors
+
+    try {
+        // 1. Determine Month Range based on selectedDate
+        const year = selectedDate.getUTCFullYear();
+        const month = selectedDate.getUTCMonth(); // 0-indexed
+        const startOfMonth = new Date(Date.UTC(year, month, 1));
+        const endOfMonth = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999)); // Last day, end of day
+        const startTimestamp = Timestamp.fromDate(startOfMonth);
+        const endTimestamp = Timestamp.fromDate(endOfMonth);
+        const monthYearStr = startOfMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+        // 2. Fetch ALL Sales and Refunds for the month (no store filter)
+        const salesCollectionRef = collection(db, 'sales');
+        const monthlySalesQuery = query(
+            salesCollectionRef,
+            where('timestamp', '>=', startTimestamp),
+            where('timestamp', '<=', endTimestamp)
+            // No storeName filter here!
+            // orderBy('storeName').orderBy('timestamp') // Optional ordering
+        );
+        const monthlyRefundsQuery = query(
+            collection(db, 'refunds'),
+            where('timestamp', '>=', startTimestamp),
+            where('timestamp', '<=', endTimestamp)
+            // No storeName filter here!
+        );
+
+        const [salesSnapshot, refundsSnapshot] = await Promise.all([
+            getDocs(monthlySalesQuery),
+            getDocs(monthlyRefundsQuery)
+        ]);
+
+        const allMonthlySales = salesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const allMonthlyRefunds = refundsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        if (allMonthlySales.length === 0 && allMonthlyRefunds.length === 0) {
+            setError(`No sales or refunds found for any store in ${monthYearStr}.`);
+            setIsExportingMonthly(false);
+            return;
+        }
+
+        // 3. Process and Aggregate Data by Store
+        const summaryByStore = {};
+        availableStores.forEach(store => {
+            summaryByStore[store] = {
+                totalSalesValue: 0,
+                totalRefundsValue: 0,
+                netSalesValue: 0,
+                salesCount: 0,
+                refundsCount: 0,
+            };
+        });
+
+        allMonthlySales.forEach(sale => {
+            const store = sale.storeName;
+            if (summaryByStore[store]) {
+                const price = typeof sale.totalPrice === 'number' ? sale.totalPrice : 0;
+                summaryByStore[store].totalSalesValue += price;
+                summaryByStore[store].salesCount += 1;
+            }
+        });
+
+        allMonthlyRefunds.forEach(refund => {
+            const store = refund.storeName;
+            if (summaryByStore[store]) {
+                const amount = typeof refund.amount === 'number' ? refund.amount : 0;
+                summaryByStore[store].totalRefundsValue += amount;
+                summaryByStore[store].refundsCount += 1;
+            }
+        });
+
+        // Calculate net sales and grand totals
+        let grandTotalSales = 0;
+        let grandTotalRefunds = 0;
+        let grandNetSales = 0;
+
+        availableStores.forEach(store => {
+            const storeData = summaryByStore[store];
+            storeData.netSalesValue = storeData.totalSalesValue - storeData.totalRefundsValue;
+            grandTotalSales += storeData.totalSalesValue;
+            grandTotalRefunds += storeData.totalRefundsValue;
+            grandNetSales += storeData.netSalesValue;
+        });
+
+
+        // 4. Generate PDF
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`Monthly Report (All Stores): ${monthYearStr}`, 14, 22);
+        let currentY = 30;
+
+        // Table for Store Summaries
+        doc.setFontSize(14);
+        doc.text("Summary by Store", 14, currentY);
+        currentY += 6;
+
+        const summaryTableColumns = ["Store", "Total Sales", "Total Refunds", "Net Sales", "# Sales", "# Refunds"];
+        const summaryTableRows = availableStores.map(store => {
+            const data = summaryByStore[store];
+            return [
+                store,
+                formatPrice(data.totalSalesValue),
+                formatPrice(data.totalRefundsValue),
+                formatPrice(data.netSalesValue),
+                data.salesCount.toString(),
+                data.refundsCount.toString()
+            ];
+        });
+
+        autoTable(doc, {
+            head: [summaryTableColumns],
+            body: summaryTableRows,
+            startY: currentY,
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 1.5 },
+            headStyles: { fillColor: [75, 85, 99], fontSize: 10 },
+            columnStyles: {
+                0: { fontStyle: 'bold' }, // Store name bold
+                1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' },
+                4: { halign: 'center' }, 5: { halign: 'center' },
+            }
+        });
+        currentY = doc.lastAutoTable.finalY + 10;
+
+        // Grand Totals Section
+        doc.setFontSize(12);
+        doc.text("Grand Totals (All Stores):", 14, currentY);
+        currentY += 6;
+
+        const grandTotalData = [
+            ['Total Sales Value:', formatPrice(grandTotalSales)],
+            ['Total Refunds Value:', formatPrice(grandTotalRefunds)],
+            ['Net Sales (All Stores):', formatPrice(grandNetSales)],
+        ];
+
+        autoTable(doc, {
+            body: grandTotalData,
+            startY: currentY,
+            theme: 'plain',
+            styles: { fontSize: 10, cellPadding: 1 },
+            columnStyles: {
+                0: { fontStyle: 'bold', halign: 'left' },
+                1: { halign: 'right' },
+            },
+            tableWidth: 'wrap',
+            margin: { left: 14 }
+        });
+
+        // 5. Save PDF
+        const monthStr = (month + 1).toString().padStart(2, '0');
+        doc.save(`MonthlyReport_AllStores_${year}-${monthStr}.pdf`);
+
+    } catch (err) {
+        console.error("Error generating monthly report:", err);
+        setError(`Failed to generate monthly report: ${err.message}`);
+    } finally {
+        setIsExportingMonthly(false);
+    }
+  };
+
+
+
   return (
     <div id="sales-modal-overlay" className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div id="sales-modal-content" className="border bg-neutral-800 p-6 rounded-lg shadow-lg w-full max-w-5xl max-h-[90vh] flex flex-col text-white">
         {/* Header remains the same */}
         <div id="sales-modal-header" className="flex justify-between items-center mb-4 flex-shrink-0 gap-4">
           <h2 className="text-xl md:text-2xl font-semibold text-white whitespace-nowrap">
-            Daily Report: {/* Changed title slightly */}
+            Daily Report: {selectedStore} {/* Changed title slightly */}
           </h2>
+
           <button
             onClick={openDatePicker}
             className="flex-grow text-center px-4 py-1 bg-neutral-700 hover:bg-neutral-600 rounded border border-neutral-600 text-lg font-medium text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-neutral-800"
             title="Select Date"
           >
             {formatDateDisplay(selectedDate)}
-          </button>
+          </button>          
           <input
              type="date"
              ref={dateInputRef}
@@ -349,14 +532,30 @@ const Sales = ({ onClose }) => {
              className="opacity-0 w-0 h-0 absolute"
              aria-hidden="true"
            />
-          <button
-            onClick={handleExportPdf}
-            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-800 whitespace-nowrap disabled:opacity-50"
-            title="Export Daily Report as PDF"
-            disabled={isLoading || (dailySales.length === 0 && dailyRefunds.length === 0)} // Disable if no data at all
-          >
-            Export PDF
-          </button>
+
+          {/* Buttons Container */}
+          <div className="flex gap-2 order-2 md:order-none">
+             {/* Daily Export Button */}
+             <button
+               onClick={handleExportDailyPdf}
+               className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs md:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-800 whitespace-nowrap disabled:opacity-50"
+               title={`Export Daily Report for ${selectedStore}`}
+               disabled={isLoading || (dailySales.length === 0 && dailyRefunds.length === 0)}
+             >
+               Export Daily PDF
+             </button>
+             {/* Monthly Export Button */}
+             <button
+               onClick={handleExportMonthlyPdfAllStores}
+               className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-xs md:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-800 whitespace-nowrap disabled:opacity-50"
+               title="Export Monthly Report (All Stores)"
+               disabled={isExportingMonthly || isLoading} // Disable while loading daily or exporting monthly
+             >
+               {isExportingMonthly ? 'Exporting...' : 'Export Monthly PDF'}
+             </button>
+          </div>
+
+
           <button
             onClick={onClose}
             className="text-red-500 hover:text-red-700 font-bold text-2xl leading-none flex-shrink-0"

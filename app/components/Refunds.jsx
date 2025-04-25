@@ -6,6 +6,7 @@ import { getFirestore, collection, query, where, orderBy, getDocs, addDoc, Times
 import { auth } from '../../utils/firebase'; // Adjust path if needed
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { FaPlus } from 'react-icons/fa'; // Icon for add button
+import { useStore } from '../context/StoreContext';
 
 // Helper function to get the start of a day in UTC (same as in Sales.jsx)
 const getUtcMidnight = (date) => {
@@ -21,6 +22,8 @@ const Refunds = ({ onClose }) => {
   const [error, setError] = useState(null);
   const [addError, setAddError] = useState(''); // Error specific to adding
   const [addSuccess, setAddSuccess] = useState(''); // Success message for adding
+  const { selectedStore, availableStores } = useStore(); 
+  
 
   // Form state for new refund
   const [newRefundReason, setNewRefundReason] = useState('');
@@ -193,7 +196,7 @@ const Refunds = ({ onClose }) => {
         {/* Header */}
         <div id="refunds-modal-header" className="flex justify-between items-center mb-4 flex-shrink-0 gap-4">
           <h2 className="text-xl md:text-2xl font-semibold text-white whitespace-nowrap">
-            Refunds:
+            Refunds: {selectedStore}
           </h2>
           {/* Date Picker Button */}
           <button
