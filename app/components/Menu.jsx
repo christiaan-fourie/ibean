@@ -6,8 +6,8 @@ import { CgClose } from "react-icons/cg";
 import ManageProducts from './ManageProducts'; // Import the ManageProducts component
 import Sales from './Sales'; // Import the Sales component
 import Refunds from './Refunds'; // *** Import the new Refunds component ***
-import { auth } from '../../utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from '../../utils/firebase'; // Adjust the path as necessary
 
 // Removed duplicate FaLock import
 

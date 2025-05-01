@@ -23,7 +23,7 @@ const Login = () => {
       // Handle successful login
       console.log('Login successful!');
       // Redirect to a dashboard or home page upon successful login
-      router.push('/'); // Example redirection path
+      router.push('/dashboard'); // Example redirection path
     } catch (err) {
       console.error('Login failed:', err);
       // Provide more user-friendly error messages if possible

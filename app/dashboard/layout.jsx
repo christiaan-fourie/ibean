@@ -1,12 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-
+import { useState, useEffect } from 'react'
 import Link from 'next/link';
-
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../../utils/firebase";
+import Login from "../components/Login";
 import { AiFillHome, AiOutlineMenu, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload } from 'react-icons/ai'
 
+
 export default function RootLayout({ children }) {
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [selectedMenuItem, setSelectedMenuItem] = useState('Homepage')
     const [isOrderSummaryOpen, setIsOrderSummaryOpen] = useState(false)
@@ -23,7 +28,32 @@ export default function RootLayout({ children }) {
         { name: 'User Account', icon: <AiOutlineUser />, href: '/dashboard/user-account' },
     ]
 
-  return (
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+            setLoading(false);
+            console.log("Auth State Changed:", currentUser ? currentUser.email : 'No user');
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
+                Loading...
+            </div>
+        );
+    }
+
+    if (!user) {
+      return <Login />;
+    } 
+
+    return (
+
+    
+
     <div className="flex h-screen">
       {/* Sidebar */}
       <div className={`bg-neutral-800 text-white ${isSidebarOpen ? 'w-64' : 'w-14'} transition-all duration-300`}>
