@@ -1,11 +1,5 @@
-
-"use client";
-import React, { useState } from 'react';
-
 import { auth } from '../../../utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-
-
 
 const UserAccount = () => {
     return (
