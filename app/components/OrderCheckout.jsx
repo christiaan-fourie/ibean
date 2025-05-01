@@ -148,19 +148,18 @@ export default function OrderCheckout() {
       }
   };
 
-  // Listen for the custom event
-  window.addEventListener('order-updated', handleOrderUpdate);
-
-  // Still listen for 'storage' for potential cross-tab updates (optional but good practice)
-  // window.addEventListener('storage', handleStorageChange); // You might keep the original storage listener too
-
-  // Cleanup listener on unmount
+  // Move window event listener setup into useEffect
   useEffect(() => {
-    return () => {
-      window.removeEventListener('order-updated', handleOrderUpdate);
-      // window.removeEventListener('storage', handleStorageChange); // Cleanup original listener if kept
-    };
-  }, [orderDetails]); // Keep orderDetails dependency for comparing state before setting
+    // Check if window is defined (client-side only)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('order-updated', handleOrderUpdate);
+
+      // Cleanup listener on unmount
+      return () => {
+        window.removeEventListener('order-updated', handleOrderUpdate);
+      };
+    }
+  }, [orderDetails]); // Keep orderDetails dependency for comparing state
 
   return (
     <div className="flex flex-col justify-between ml-4 p-4 bg-neutral-800 shadow-md min-w-[400px] max-w-[400px]">
