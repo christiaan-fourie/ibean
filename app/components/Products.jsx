@@ -167,7 +167,7 @@ const Products = () => {
     : products.filter(product => product.category === selectedCategory);
 
   return (
-    <div className="flex flex-col h-full"> {/* Ensure parent container allows flex-grow */}
+    <div className="flex flex-col"> {/* Ensure parent container allows flex-grow */}
 
     {/* Category Tabs Section */}
     <div className="px-2 bg-neutral-900">
@@ -189,7 +189,7 @@ const Products = () => {
        </div>
 
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex flex-wrap px-2 mt-4 gap-4 py-4 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
+      <div className="flex flex-wrap px-2 mt-4 gap-4 py-4 pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
         {filteredProducts.map((product) => (
           <div
             key={product.id}

@@ -1,7 +1,6 @@
 'use client'
 
 import Login from "./components/Login";
-import Dashboard from "./components/Dashboard";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
