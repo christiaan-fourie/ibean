@@ -1,3 +1,5 @@
+'use client';
+
 import { auth } from '../../../utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
