@@ -163,7 +163,7 @@ export default function OrderCheckout() {
   }, [orderDetails]); // Keep orderDetails dependency for comparing state before setting
 
   return (
-    <div className="flex flex-col justify-between ml-4 p-4 bg-neutral-800 rounded-lg shadow-md min-w-[400px] max-w-[400px]">
+    <div className="flex flex-col justify-between ml-4 p-4 bg-neutral-800 shadow-md min-w-[400px] max-w-[400px]">
       {/* Order Summary Section */}
       <div className="mt-4">
         <h2 className="text-lg font-semibold text-white">Order Summary</h2>

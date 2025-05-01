@@ -117,7 +117,6 @@ const Products = () => {
 
      // *** Dispatch a CUSTOM event instead of 'storage' ***
      window.dispatchEvent(new CustomEvent('order-updated'));
-     // console.log('Dispatched order-updated event'); // For debugging
   };
 
   // Function called when clicking a product card/button
@@ -131,12 +130,10 @@ const Products = () => {
             id: product.id, // Use original ID
             name: product.name,
             price: product.price,
-            category: product.category,
-            // description: product.description // Optional: add description if needed in cart
+            category: product.category            
         });
     } else {
         console.warn(`Product "${product.name}" (ID: ${product.id}) is missing price or size information.`);
-        // Optionally show an error to the user
     }
   };
 
@@ -172,7 +169,7 @@ const Products = () => {
   return (
     <div className="flex flex-col h-full"> {/* Ensure parent container allows flex-grow */}
 
-    {/* Category Tabs Section - Fixed at the bottom */}
+    {/* Category Tabs Section */}
     <div className="px-2 bg-neutral-900">
          <div className="flex justify-left space-x-4">
            {categories.map((category) => (
@@ -192,11 +189,12 @@ const Products = () => {
        </div>
 
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex-grow grid grid-cols-1 px-2 mt-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 py-4 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
+      <div className="flex flex-wrap px-2 mt-4 gap-4 py-4 max-h-[calc(100vh-230px)] pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
         {filteredProducts.map((product) => (
           <div
             key={product.id}
-            className="h-[160px] flex flex-col justify-between bg-neutral-800 border border-gray-700 rounded-lg p-4 hover:shadow-xl hover:scale-105 transition-transform duration-300"
+            className="h-[120px] w-[120px] flex flex-col justify-center bg-neutral-800 border border-gray-700 rounded-lg p-4 hover:shadow-xl hover:scale-105 transition-transform duration-300"
+            onClick={() => handleProductClick(product)}
           >
             {/* Content grouped for flex layout */}
             <div>
@@ -204,7 +202,7 @@ const Products = () => {
                 {product.name}
                 </h3>
 
-                {/* Conditionally display price or size indicator */}
+                {/* Conditionally display price or size indicator
                 {product.category === 'Coffee' && product.sizes ? (
                      <p className="text-sm text-center text-indigo-400 mb-4">(Select Size)</p>
                  ) : product.price !== undefined ? (
@@ -214,19 +212,8 @@ const Products = () => {
                  ) : (
                     <p className="text-sm text-center text-red-400 mb-4">(Price N/A)</p>
                  )
-                }
-
-                {/* <p className="text-sm text-gray-400 text-center mb-2"> {product.description || 'No description available.'} </p> */}
-            </div>
-
-            {/* Button always at the bottom */}
-            <button
-              onClick={() => handleProductClick(product)} // Use the new handler
-              className="mt-auto bg-indigo-600 text-white py-1.5 px-3 text-sm rounded-md hover:bg-indigo-700 transition-colors w-full" // Adjusted padding, font size
-            >
-              {/* Change button text based on category */}
-              {product.category === 'Coffee' && product.sizes ? 'Select Size' : 'Add to Order'}
-            </button>
+                } */}
+            </div>            
           </div>
         ))}
          {/* Display message if no products match filter */}
