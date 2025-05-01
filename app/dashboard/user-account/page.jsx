@@ -10,10 +10,10 @@ const UserAccount = () => {
             <p className="text-sm text-neutral-300 text-center mb-6">Are you sure you want to logout?</p>
             <div className="flex justify-center gap-4">
                 <button
-                        className="bg-red-600 text-white py-1.5 px-4 text-sm rounded-md hover:bg-red-700 transition-colors w-full"
-                        onClick={() => {
-                            signOut(auth);
-                        }}>Logout
+                    className="bg-red-600 text-white py-1.5 px-4 text-sm rounded-md hover:bg-red-700 transition-colors w-full"
+                    onClick={() => {
+                        signOut(auth);
+                    }}>Logout
                 </button>
             </div>
         </div>
