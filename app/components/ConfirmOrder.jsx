@@ -8,8 +8,8 @@ import { auth } from '../../utils/firebase'; // Adjust path if needed
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useStore } from '../context/StoreContext';
 
-// Component receives order details, total price, and a close handler
-const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
+// Component receives order details, total price, applied specials, and a close handler
+const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) => {
   const db = getFirestore(); // Get Firestore instance
   const [user] = useAuthState(auth); // Get current user
   const { selectedStore } = useStore(); // Get selected store from context
@@ -21,24 +21,38 @@ const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
   // Function to handle the confirmation and database write
   const handleConfirm = async () => {
     if (!user) {
-      console.error("User not logged in");
-      // Add user feedback (e.g., alert or message in the modal)
       alert("You must be logged in to complete the sale.");
       return;
     }
 
     const saleData = {
-      timestamp: serverTimestamp(), // Use Firestore server timestamp
-        userId: user.uid, // Store user ID
-        username: user.displayName || user.email, // Store username or email
-        items: orderDetails.map(item => ({ // Store relevant item details
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: parseFloat(String(item.price).replace('R', '') || 0) // Store price as number
-        })),
-      totalPrice: parseFloat(String(totalPrice).replace('R', '') || 0), // Store total price as number
-      storeName: selectedStore, // *** Add the selected store name ***
+      timestamp: serverTimestamp(),
+      userId: user.uid,
+      username: user.displayName || user.email,
+      items: orderDetails.map(item => ({
+        id: item.id,
+        name: item.name,
+        size: item.size || null, // Provide default value
+        quantity: parseInt(item.quantity) || 0, // Ensure number
+        price: parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0 // Better price parsing
+      })),
+      appliedSpecials: appliedSpecials ? appliedSpecials.map(special => ({
+        id: special.id || '',
+        name: special.name || '',
+        triggerProduct: special.triggerProduct || '',
+        rewardProduct: special.rewardProduct || '',
+        discountType: special.discountType || 'free',
+        discountValue: parseFloat(special.discountValue) || 0,
+        savedAmount: parseFloat(special.savedAmount) || 0
+      })) : [],
+      totalDiscount: appliedSpecials ? 
+        appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0,
+      subtotalBeforeDiscounts: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) + 
+        (appliedSpecials ? 
+          appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0),
+      totalPrice: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) || 0,
+      storeName: selectedStore || 'Unknown Store',
+      createdAt: new Date().toISOString() // Add timestamp for tracking
     };
 
     try {
@@ -46,7 +60,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
 
       await addDoc(salesCollectionRef, saleData);
 
-      
       console.log("Sale recorded successfully!");
       localStorage.removeItem('orderDetails'); // Clear order details from local storage
       window.location.reload(); // Refresh the page to update the order list
@@ -54,7 +67,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
 
     } catch (error) {
       console.error("Error recording sale: ", error);
-      // Add user feedback for error
       alert(`Error recording sale: ${error.message}`);
     }
   };
@@ -71,12 +83,28 @@ const ConfirmOrder = ({ orderDetails, totalPrice, onClose }) => {
             <ul className="text-sm text-left space-y-1">
               {orderDetails.map(item => (
                 <li key={item.id} className="flex justify-between">
-                  <span>{item.quantity} x {item.name}</span>
-                  {/* Ensure price is handled correctly */}
+                  <span>{item.quantity} x {item.name} {item.size && `(${item.size})`}</span>
                   <span>R{(parseFloat(String(item.price).replace('R', '') || 0) * item.quantity).toFixed(2)}</span>
                 </li>
               ))}
             </ul>
+
+            {/* Display Applied Specials */}
+            {appliedSpecials.length > 0 && (
+              <>
+                <hr className="my-2 border-neutral-600"/>
+                <h4 className="text-sm font-semibold text-green-400">Applied Specials:</h4>
+                <ul className="text-sm text-left space-y-1">
+                  {appliedSpecials.map((special, index) => (
+                    <li key={index} className="flex justify-between text-green-400">
+                      <span>{special.name}</span>
+                      <span>-R {special.savedAmount.toFixed(2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
             <hr className="my-2 border-neutral-600"/>
             <div className="flex justify-between font-bold text-base">
               <span>Total:</span>

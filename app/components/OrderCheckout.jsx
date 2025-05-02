@@ -1,19 +1,45 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FaPlus, FaMinus } from 'react-icons/fa';
+import { FaPlus, FaMinus, FaGift } from 'react-icons/fa';
 import { ImBin } from 'react-icons/im';
+import { collection, getDocs } from 'firebase/firestore';
+import db from '../../utils/firebase';
 import ConfirmOrder from './ConfirmOrder';
 
 export default function OrderCheckout() {
-  // State to track order details
   const [orderDetails, setOrderDetails] = useState([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [specials, setSpecials] = useState([]);
+  const [appliedSpecials, setAppliedSpecials] = useState([]);
 
   const handleCheckout = () => {
     console.log('Checkout button clicked');
     setShowConfirmation(true);
   };
+
+  // Fetch specials on mount
+  useEffect(() => {
+    const fetchSpecials = async () => {
+      try {
+        const specialsSnapshot = await getDocs(collection(db, 'specials'));
+        const specialsData = specialsSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(special => {
+            const today = new Date();
+            const startDate = special.startDate ? new Date(special.startDate) : null;
+            const endDate = special.endDate ? new Date(special.endDate) : null;
+            return special.active && 
+              (!startDate || today >= startDate) && 
+              (!endDate || today <= endDate);
+          });
+        setSpecials(specialsData);
+      } catch (error) {
+        console.error('Error fetching specials:', error);
+      }
+    };
+    fetchSpecials();
+  }, []);
 
   // Load order details from localStorage on mount
   useEffect(() => {
@@ -21,149 +47,247 @@ export default function OrderCheckout() {
     if (storedData) {
       try {
         const parsedData = JSON.parse(storedData);
-        // Ensure data is an array and items have numeric price
         if (Array.isArray(parsedData)) {
-             const validatedData = parsedData.map(item => ({
-                 ...item,
-                 price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '0').replace(/[^\d.-]/g, '')),
-                 quantity: typeof item.quantity === 'number' ? item.quantity : 1
-             })).filter(item => !isNaN(item.price) && item.quantity > 0); // Filter out invalid items
-             setOrderDetails(validatedData);
+          const validatedData = parsedData.map(item => ({
+            ...item,
+            price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '0').replace(/[^\d.-]/g, '')),
+            quantity: typeof item.quantity === 'number' ? item.quantity : 1
+          })).filter(item => !isNaN(item.price) && item.quantity > 0);
+          setOrderDetails(validatedData);
         } else {
-            setOrderDetails([]); // Set empty if stored data is not array
-            localStorage.removeItem('orderDetails'); // Clear invalid storage
+          setOrderDetails([]);
+          localStorage.removeItem('orderDetails');
         }
       } catch (e) {
         console.error("Failed to parse order details from localStorage", e);
-        setOrderDetails([]); // Reset on error
-        localStorage.removeItem('orderDetails'); // Clear invalid storage
+        setOrderDetails([]);
+        localStorage.removeItem('orderDetails');
       }
     }
 
     const handleStorageChange = (event) => {
-       // Check if the change was for 'orderDetails' key specifically if needed
-        if (event.key === 'orderDetails' || event.key === null) { // null check for direct localStorage.setItem calls
-             const updatedData = localStorage.getItem('orderDetails');
-            if (updatedData) {
-                 try {
-                     const parsedData = JSON.parse(updatedData);
-                     if (Array.isArray(parsedData)) {
-                        const validatedData = parsedData.map(item => ({
-                            ...item,
-                            price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '0').replace(/[^\d.-]/g, '')),
-                            quantity: typeof item.quantity === 'number' ? item.quantity : 1
-                         })).filter(item => !isNaN(item.price) && item.quantity > 0);
-                         setOrderDetails(validatedData);
-                     } else {
-                         setOrderDetails([]);
-                     }
-                 } catch (e) {
-                     console.error("Failed to parse updated order details", e);
-                     setOrderDetails([]);
-                 }
+      if (event.key === 'orderDetails' || event.key === null) {
+        const updatedData = localStorage.getItem('orderDetails');
+        if (updatedData) {
+          try {
+            const parsedData = JSON.parse(updatedData);
+            if (Array.isArray(parsedData)) {
+              const validatedData = parsedData.map(item => ({
+                ...item,
+                price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '0').replace(/[^\d.-]/g, '')),
+                quantity: typeof item.quantity === 'number' ? item.quantity : 1
+              })).filter(item => !isNaN(item.price) && item.quantity > 0);
+              setOrderDetails(validatedData);
             } else {
-                 setOrderDetails([]); // Clear state if item removed/empty
+              setOrderDetails([]);
             }
+          } catch (e) {
+            console.error("Failed to parse updated order details", e);
+            setOrderDetails([]);
+          }
+        } else {
+          setOrderDetails([]);
         }
+      }
     };
 
-    // Listen for both 'storage' event (cross-tab) and custom 'storage' dispatch (same-tab)
     window.addEventListener('storage', handleStorageChange);
-    // No need for manual custom event listener if Products.jsx dispatches 'storage' directly
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
-  // This useEffect only saves valid state to localStorage
   useEffect(() => {
-      // Only save if orderDetails is a non-empty array
-      if (orderDetails.length > 0) {
-         localStorage.setItem('orderDetails', JSON.stringify(orderDetails));
-      } else {
-          // If orderDetails becomes empty, remove item from storage
-          localStorage.removeItem('orderDetails');
-      }
+    if (orderDetails.length > 0) {
+      localStorage.setItem('orderDetails', JSON.stringify(orderDetails));
+    } else {
+      localStorage.removeItem('orderDetails');
+    }
   }, [orderDetails]);
 
-  // Calculate subtotal directly from numeric prices
-  const subtotal = orderDetails.reduce((total, item) => {
-    // Ensure price and quantity are numbers before calculation
-    const price = typeof item.price === 'number' ? item.price : 0;
-    const quantity = typeof item.quantity === 'number' ? item.quantity : 0;
-    return total + (price * quantity);
-  }, 0);
+  useEffect(() => {   
+    
+    const checkSpecials = () => {
+      const newAppliedSpecials = [];
+      const processedSpecialIds = new Set(); // Track processed specials
 
-  // Tax calculation remains the same logically, but based on numeric subtotal
-  const taxRate = 0.155;
-  const tax = (subtotal / (1 + taxRate)) * taxRate; // Calculate tax based on tax-inclusive subtotal
-  const totalPrice = subtotal; // Total is the tax-inclusive subtotal
+      // Validate and sort specials by priority
+      const validSpecials = specials
+        .filter(special => {
+          const today = new Date();
+          const startDate = special.startDate ? new Date(special.startDate) : null;
+          const endDate = special.endDate ? new Date(special.endDate) : null;
+          
+          return special.active && 
+            (!startDate || today >= startDate) && 
+            (!endDate || today <= endDate) &&
+            special.triggerProduct && // Ensure required fields exist
+            special.rewardProduct;
+        })
+        .sort((a, b) => (b.discountValue || 0) - (a.discountValue || 0)); // Higher discounts first
 
-  // Handle quantity change
+      validSpecials.forEach(special => {
+        try {
+          // Skip if we've already processed this special
+          if (processedSpecialIds.has(special.name)) return;
+
+          // Find trigger item with proper ID handling for sized products
+          const triggerItem = orderDetails.find(item => {
+            if (!item) return false; // Guard against null items
+            
+            // For coffee products with size
+            if (special.triggerProductSize) {
+              const [baseId, size] = item.id.split('_');
+              const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
+
+              return baseId === special.triggerProduct && 
+                    itemSize === special.triggerProductSize;
+            }
+            // For regular products without size
+            return item.id === special.triggerProduct;
+          });
+          
+          if (triggerItem && triggerItem.quantity >= special.triggerQuantity) {
+            const specialApplications = Math.floor(triggerItem.quantity / special.triggerQuantity);
+            
+            // Find reward item with same logic
+            const rewardItem = orderDetails.find(item => {
+              if (special.rewardProductSize) {
+                const [baseId, size] = item.id.split('_');
+                const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
+                return baseId === special.rewardProduct && 
+                      itemSize === special.rewardProductSize;
+              }
+              return item.id === special.rewardProduct;
+            });
+
+            if (rewardItem) {
+              const discountQuantity = Math.min(
+                specialApplications * special.rewardQuantity,
+                rewardItem.quantity
+              );
+
+              if (discountQuantity > 0) {
+                const savedAmount = special.discountType === 'free'
+                  ? rewardItem.price * discountQuantity
+                  : (rewardItem.price * discountQuantity * (special.discountValue / 100));
+
+                processedSpecialIds.add(special.id);
+                const existingIndex = newAppliedSpecials.findIndex(s => s.id === special.id);
+                if (existingIndex !== -1) {
+                  newAppliedSpecials.splice(existingIndex, 1);
+                }
+                newAppliedSpecials.push({
+                  id: special.id,
+                  name: special.name,
+                  description: special.description,
+                  discountQuantity,
+                  savedAmount,
+                  triggerProduct: triggerItem.name,
+                  triggerSize: triggerItem.size,
+                  rewardProduct: rewardItem.name,
+                  rewardSize: rewardItem.size,
+                  discountType: special.discountType,
+                  discountValue: special.discountValue
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing special ${special.id}:`, error);
+        }
+      });
+
+      const validAppliedSpecials = newAppliedSpecials.filter(special => 
+        special && special.id && special.savedAmount > 0
+      );
+
+      console.log('Final applied specials:', validAppliedSpecials);
+      setAppliedSpecials(validAppliedSpecials);
+    };
+
+    checkSpecials();
+
+    
+
+  }, [orderDetails, specials]);
+
+  const calculateTotals = () => {
+    let subtotal = orderDetails.reduce((total, item) => {
+      return total + (item.price * item.quantity);
+    }, 0);
+
+    const specialsDiscount = appliedSpecials.reduce((total, special) => {
+      return total + special.savedAmount;
+    }, 0);
+
+    subtotal -= specialsDiscount;
+    const taxRate = 0.155;
+    const tax = (subtotal / (1 + taxRate)) * taxRate;
+    
+    return {
+      subtotal,
+      tax,
+      total: subtotal,
+      specialsDiscount
+    };
+  };
+
   const handleQuantityChange = (id, delta) => {
     setOrderDetails((prevDetails) =>
-       prevDetails.map((item) =>
-         item.id === id
-           ? { ...item, quantity: Math.max(1, (item.quantity || 0) + delta) } // Ensure quantity is treated as number
-           : item
-       ).filter(item => item.quantity > 0) // Remove item if quantity becomes 0 or less
+      prevDetails.map((item) =>
+        item.id === id
+          ? { ...item, quantity: Math.max(1, (item.quantity || 0) + delta) }
+          : item
+      ).filter(item => item.quantity > 0)
     );
   };
 
-  // Handle item deletion
   const handleDeleteItem = (id) => {
     setOrderDetails((prevDetails) => prevDetails.filter((item) => item.id !== id));
   };
 
-  // Function to handle the custom event
   const handleOrderUpdate = () => {
-      // console.log('Custom order-updated event received'); // For debugging
-      const updatedData = localStorage.getItem('orderDetails');
-      // Use the same robust parsing logic as before
-       if (updatedData) {
-           try {
-               const parsedData = JSON.parse(updatedData);
-               if (Array.isArray(parsedData)) {
-                  const validatedData = parsedData.map(item => ({
-                      ...item,
-                      price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '0').replace(/[^\d.-]/g, '')),
-                      quantity: typeof item.quantity === 'number' ? item.quantity : 1
-                   })).filter(item => !isNaN(item.price) && item.quantity > 0);
-                   // Only update state if data actually changed
-                   if (JSON.stringify(validatedData) !== JSON.stringify(orderDetails)) {
-                       setOrderDetails(validatedData);
-                   }
-               } else {
-                   // Clear state if data is invalid and state is not already empty
-                   if (orderDetails.length > 0) setOrderDetails([]);
-               }
-           } catch (e) {
-               console.error("Failed to parse updated order details", e);
-               if (orderDetails.length > 0) setOrderDetails([]);
-           }
-      } else {
-          // Clear state if item removed/empty and state is not already empty
+    const updatedData = localStorage.getItem('orderDetails');
+    if (updatedData) {
+      try {
+        const parsedData = JSON.parse(updatedData);
+        if (Array.isArray(parsedData)) {
+          const validatedData = parsedData.map(item => ({
+            ...item,
+            price: typeof item.price === 'number' ? item.price : parseFloat(String(item.price || '0').replace(/[^\d.-]/g, '')),
+            quantity: typeof item.quantity === 'number' ? item.quantity : 1
+          })).filter(item => !isNaN(item.price) && item.quantity > 0);
+          if (JSON.stringify(validatedData) !== JSON.stringify(orderDetails)) {
+            setOrderDetails(validatedData);
+          }
+        } else {
           if (orderDetails.length > 0) setOrderDetails([]);
+        }
+      } catch (e) {
+        console.error("Failed to parse updated order details", e);
+        if (orderDetails.length > 0) setOrderDetails([]);
       }
+    } else {
+      if (orderDetails.length > 0) setOrderDetails([]);
+    }
   };
 
-  // Move window event listener setup into useEffect
   useEffect(() => {
-    // Check if window is defined (client-side only)
     if (typeof window !== 'undefined') {
       window.addEventListener('order-updated', handleOrderUpdate);
 
-      // Cleanup listener on unmount
       return () => {
         window.removeEventListener('order-updated', handleOrderUpdate);
       };
     }
-  }, [orderDetails]); // Keep orderDetails dependency for comparing state
+  }, [orderDetails]);
+
+  const totals = calculateTotals();
 
   return (
-    <div className="flex flex-col justify-between ml-4 p-4 bg-neutral-800 shadow-md min-w-[400px] max-w-[400px]">
-      {/* Order Summary Section */}
+    <div className="flex flex-col justify-between ml-4 p-4 bg-neutral-800 shadow-md min-w-[400px] max-w-[400px] min-h-screen">
       <div className="mt-4">
         <h2 className="text-lg font-semibold text-white">Order Summary</h2>
         <p className="text-sm text-gray-400">Adjust quantities as needed.</p>
@@ -210,32 +334,57 @@ export default function OrderCheckout() {
         </ul>
       </div>
 
-      {/* Totals Section */}
+      {appliedSpecials.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-md font-semibold text-white flex items-center gap-2">
+            <FaGift className="text-green-500" />
+            Applied Specials
+          </h3>
+          <ul className="mt-2 text-sm text-gray-400">
+            {appliedSpecials.map((special, index) => (
+              <li key={index} className="flex justify-between items-center py-2 border-b border-neutral-700">
+                <span>{special.name}</span>
+                <span className="text-green-500">-R {special.savedAmount.toFixed(2)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mt-auto pt-4">
         <hr className="my-4 border-neutral-700" />
         <div className="flex justify-between text-sm text-gray-400">
-          <span>Subtotal (inc. Tax)</span>
-          <span>R {subtotal.toFixed(2)}</span>
+          <span>Subtotal (before specials)</span>
+          <span>R {(totals.subtotal + totals.specialsDiscount).toFixed(2)}</span>
         </div>
+        {totals.specialsDiscount > 0 && (
+          <div className="flex justify-between text-sm text-green-500">
+            <span>Specials Discount</span>
+            <span>-R {totals.specialsDiscount.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm text-gray-400">
           <span>Tax included (15.5%)</span>
-          <span>R {tax.toFixed(2)}</span>
+          <span>R {totals.tax.toFixed(2)}</span>
         </div>
         <div className="flex justify-between font-bold text-lg text-white mt-2">
           <span>Total</span>
-          <span>R {totalPrice.toFixed(2)}</span>
+          <span>R {totals.total.toFixed(2)}</span>
         </div>
-        <button className="mt-4 w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
-                onClick={handleCheckout}
-                disabled={orderDetails.length === 0}
+        <button 
+          className="mt-4 w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
+          onClick={handleCheckout}
+          disabled={orderDetails.length === 0}
         >
           Checkout
         </button>
       </div>
+
       {showConfirmation && (
         <ConfirmOrder
           orderDetails={orderDetails}
-          totalPrice={totalPrice.toFixed(2)}
+          totalPrice={totals.total.toFixed(2)}
+          appliedSpecials={appliedSpecials}
           onClose={() => setShowConfirmation(false)}
         />
       )}

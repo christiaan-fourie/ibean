@@ -90,12 +90,7 @@ export default function RootLayout({ children }) {
 
       
       <div className="flex-1 overflow-auto">
-        <header className="bg-neutral-800 h-14 flex gap-2 items-center justify-left">
-              <span className="text-neutral-400">Welcome, </span>
-              <span className="font-semibold text-neutral-50">
-                  {user?.displayName || user?.email || 'User'}
-              </span>
-        </header>
+        
         <main className="">          
           {children}
         </main>
