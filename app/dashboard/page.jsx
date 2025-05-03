@@ -12,6 +12,15 @@ export default function DashboardHome() {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [storeData, setStoreData] = useState(null);
+  const [staffAuth, setStaffAuth] = useState(null);
+
+  // Add staff auth check
+  useEffect(() => {
+    const auth = localStorage.getItem('staffAuth');
+    if (auth) {
+      setStaffAuth(JSON.parse(auth));
+    }
+  }, []);
 
   // Fetch store data on component mount
   useEffect(() => {
@@ -20,6 +29,7 @@ export default function DashboardHome() {
         const salesData = [];
         const productsData = [];
         const specialsData = [];
+        const staffData = [];
 
         // Fetch sales
         const salesSnapshot = await getDocs(collection(db, 'sales'));
@@ -33,7 +43,11 @@ export default function DashboardHome() {
         const specialsSnapshot = await getDocs(collection(db, 'specials'));
         specialsSnapshot.forEach(doc => specialsData.push({ id: doc.id, ...doc.data() }));
 
-        setStoreData({ sales: salesData, products: productsData, specials: specialsData });
+        // Fetch staff
+        const staffSnapshot = await getDocs(collection(db, 'staff'));
+        staffSnapshot.forEach(doc => staffData.push({ id: doc.id, ...doc.data() }));
+
+        setStoreData({ sales: salesData, products: productsData, specials: specialsData, staff: staffData });
       } catch (error) {
         console.error('Error fetching store data:', error);
       }
@@ -53,16 +67,25 @@ export default function DashboardHome() {
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       
-      // Prepare context from store data
-      const context = `You are a helpful AI assistant for an coffee shop called Chillzone. You are on the home page of the dashboard of a POS system. 
-        The dashboard is used by the store owner to manage the store as well as the employees that work there.
-        Here is the current store data:
+      // Enhanced context with staff information
+      const context = `You are an AI assistant for the Chilzone coffee shop's dashboard POS system (called iBean). 
+        You are currently helping ${staffAuth.staffName} who is a ${staffAuth.accountType}.
+
+        ${staffAuth.accountType === 'manager' 
+          ? 'As a manager, they have full access to all store data and management functions.'
+          : 'As a staff member, they focus mainly on sales and basic store operations.'}
+
+        Current store data:
         Products: ${JSON.stringify(storeData.products)}
         Sales: ${JSON.stringify(storeData.sales)}
         Specials: ${JSON.stringify(storeData.specials)}
+        Staff: ${JSON.stringify(storeData.staff)}
         
-        The current date is: ${new Date().toLocaleDateString()}.
-        Please answer questions about the store data, sales trends, and product performance.
+        Current date: ${new Date().toLocaleDateString()}
+
+        Please provide relevant information based on their role. For staff members, focus on sales and product information.
+        For managers, include detailed analysis and management insights.
+
         Question: ${userInput}`;
 
       const result = await model.generateContent(context);
@@ -82,9 +105,35 @@ export default function DashboardHome() {
     setUserInput('');
   };
 
+  // Add role-specific greeting
+  useEffect(() => {
+    if (staffAuth && messages.length === 0) {
+      const greeting = {
+        role: 'assistant',
+        content: `Welcome ${staffAuth.staffName}! ${
+          staffAuth.accountType === 'manager' 
+            ? 'I can help you with store management, analysis, and operations.' 
+            : 'I can help you with sales information and daily operations.'
+        } What would you like to know?`
+      };
+      setMessages([greeting]);
+    }
+  }, [staffAuth]);
+
   return (
     <div className="flex flex-col h-screen p-4 bg-neutral-900 text-neutral-100">
-      <h1 className="text-2xl font-bold mb-4 text-white">iBean Dashboard Assistant</h1>
+      
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold text-white">iBean Dashboard Assistant</h1>
+        {staffAuth && (
+          <div className="text-sm text-neutral-400">
+            Logged in as: <span className="text-white font-medium">{staffAuth.staffName}</span>
+            <span className="ml-2 px-2 py-1 bg-neutral-800 rounded text-xs capitalize">
+              {staffAuth.accountType}
+            </span>
+          </div>
+        )}
+      </div>
       
       <div className="flex-1 bg-neutral-800 rounded-lg shadow-lg p-4 mb-4 overflow-auto border border-neutral-700">
         <div className="space-y-4">

@@ -4,16 +4,37 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { FaEdit, FaTrashAlt } from 'react-icons/fa';
 import db from '../../../utils/firebase';
+import RouteGuard from '../../components/RouteGuard';
 
 export default function Categories() {
     const [categories, setCategories] = useState([]);
+    const [staffAuth, setStaffAuth] = useState(null);
     const [newCategory, setNewCategory] = useState({
         name: '',
         description: '',
+        active: true,
+        createdBy: null,
+        storeId: null,
+        createdAt: null,
+        updatedAt: null,
+        updatedBy: null,
+        order: 0
     });
     const [editingId, setEditingId] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
+
+    useEffect(() => {
+        const getStaffAuth = () => {
+            const auth = localStorage.getItem('staffAuth');
+            if (auth) {
+                setStaffAuth(JSON.parse(auth));
+            }
+        };
+    
+        getStaffAuth();
+    }, []);
+
 
     // Fetch categories on component mount
     useEffect(() => {
@@ -44,16 +65,31 @@ export default function Categories() {
     const resetForm = () => {
         setNewCategory({
             name: '',
-            description: ''
+            description: '',
+            active: true,
+            createdBy: null,
+            storeId: null,
+            createdAt: null,
+            updatedAt: null,
+            updatedBy: null,
+            order: 0
         });
         setEditingId(null);
     };
 
+    // Update the handleStartEdit function
     const handleStartEdit = (category) => {
         setEditingId(category.id);
         setNewCategory({
             name: category.name,
-            description: category.description
+            description: category.description || '',
+            active: category.active ?? true,
+            createdBy: category.createdBy || null,
+            storeId: category.storeId || null,
+            createdAt: category.createdAt || null,
+            updatedAt: category.updatedAt || null,
+            updatedBy: category.updatedBy || null,
+            order: category.order || 0
         });
     };
 
@@ -74,22 +110,42 @@ export default function Categories() {
         e.preventDefault();
         setSuccessMessage('');
         setErrorMessage('');
-
+    
         if (!newCategory.name.trim()) {
             setErrorMessage('Category name is required');
             return;
         }
-
+    
         try {
+            const now = new Date().toISOString();
+            const categoryData = {
+                ...newCategory,
+                updatedAt: now
+            };
+    
             if (editingId) {
-                await updateDoc(doc(db, 'categories', editingId), newCategory);
+                categoryData.updatedBy = {
+                    id: staffAuth.staffId,
+                    name: staffAuth.staffName,
+                    role: staffAuth.accountType
+                };
+                
+                await updateDoc(doc(db, 'categories', editingId), categoryData);
                 setCategories(categories.map(c => 
-                    c.id === editingId ? { ...newCategory, id: editingId } : c
+                    c.id === editingId ? { ...categoryData, id: editingId } : c
                 ));
                 setSuccessMessage('Category updated successfully');
             } else {
-                const docRef = await addDoc(collection(db, 'categories'), newCategory);
-                setCategories([...categories, { ...newCategory, id: docRef.id }]);
+                categoryData.createdAt = now;
+                categoryData.createdBy = {
+                    id: staffAuth.staffId,
+                    name: staffAuth.staffName,
+                    role: staffAuth.accountType
+                };
+                categoryData.order = categories.length;
+    
+                const docRef = await addDoc(collection(db, 'categories'), categoryData);
+                setCategories([...categories, { ...categoryData, id: docRef.id }]);
                 setSuccessMessage('Category added successfully');
             }
             resetForm();
@@ -100,6 +156,7 @@ export default function Categories() {
     };
 
     return (
+        <RouteGuard requiredRoles={['manager']}>
         <div className="flex flex-col min-h-screen p-4 bg-neutral-900 text-neutral-50">
             <h1 className="text-3xl font-bold mb-6">Categories Management</h1>
 
@@ -124,6 +181,20 @@ export default function Categories() {
                         className="p-2 bg-neutral-700 rounded"
                     />
                 </div>
+                <div className="flex items-center gap-2 mb-4">
+                    <input
+                        type="checkbox"
+                        id="active"
+                        name="active"
+                        checked={newCategory.active}
+                        onChange={(e) => setNewCategory(prev => ({
+                            ...prev,
+                            active: e.target.checked
+                        }))}
+                        className="form-checkbox h-5 w-5 text-indigo-600 rounded bg-neutral-700"
+                    />
+                    <label htmlFor="active" className="text-neutral-200">Active</label>
+                </div>
                 <button
                     type="submit"
                     className="w-full p-2 bg-indigo-600 hover:bg-indigo-700 rounded transition-colors"
@@ -143,30 +214,50 @@ export default function Categories() {
             {/* Categories List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {categories.map(category => (
+                    // Update the category card in the return statement
                     <div key={category.id} className="p-4 bg-neutral-800 rounded-lg">
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="text-xl font-bold">{category.name}</h3>
                                 <p className="text-neutral-400">{category.description}</p>
                             </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => handleStartEdit(category)}
-                                    className="text-blue-400 hover:text-blue-300 transition-colors"
-                                >
-                                    <FaEdit />
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(category.id)}
-                                    className="text-red-400 hover:text-red-300 transition-colors"
-                                >
-                                    <FaTrashAlt />
-                                </button>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded text-sm ${
+                                    category.active ? 'bg-green-600' : 'bg-red-600'
+                                }`}>
+                                    {category.active ? 'Active' : 'Inactive'}
+                                </span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleStartEdit(category)}
+                                        className="text-blue-400 hover:text-blue-300 transition-colors"
+                                    >
+                                        <FaEdit />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(category.id)}
+                                        className="text-red-400 hover:text-red-300 transition-colors"
+                                    >
+                                        <FaTrashAlt />
+                                    </button>
+                                </div>
                             </div>
+                        </div>
+                        <div className="mt-4 pt-2 border-t border-neutral-700 text-xs text-neutral-400">
+                            {category.createdBy && (
+                                <p>Created by: {category.createdBy.name}</p>
+                            )}
+                            {category.createdAt && (
+                                <p>Created: {new Date(category.createdAt).toLocaleDateString()}</p>
+                            )}
+                            {category.updatedBy && (
+                                <p>Last updated by: {category.updatedBy.name}</p>
+                            )}
                         </div>
                     </div>
                 ))}
             </div>
         </div>
+        </RouteGuard>
     );
 }

@@ -4,18 +4,28 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { FaRegCircle, FaCheckCircle, FaTrashAlt, FaEdit } from 'react-icons/fa';
 import db from '../../../utils/firebase';
+import { getAuth } from 'firebase/auth';
+import RouteGuard from '../../components/RouteGuard';
+
 
 // Define coffee sizes
 const COFFEE_SIZES = ['Solo', 'Short', 'Tall', 'Black'];
 
 export default function Products() {
     const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [staffAuth, setStaffAuth] = useState(null);
     const [newProduct, setNewProduct] = useState({
         name: '',
         price: '',
         sizes: {},
         description: '',
         category: '',
+        createdBy: null,
+        storeId: null,
+        createdAt: null,
+        updatedAt: null,
+        updatedBy: null
     });
     const [editingProductId, setEditingProductId] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
@@ -37,6 +47,35 @@ export default function Products() {
             }
         };
         fetchProducts();
+    }, []);
+
+    // Add after existing useEffect
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const querySnapshot = await getDocs(collection(db, 'categories'));
+                const categoriesData = querySnapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }))
+                    .filter(category => category.active); // Only show active categories
+                setCategories(categoriesData);
+            } catch (error) {
+                setErrorMessage('Failed to fetch categories');
+                console.error('Error fetching categories:', error);
+            }
+        };
+
+        const getStaffAuth = () => {
+            const auth = localStorage.getItem('staffAuth');
+            if (auth) {
+                setStaffAuth(JSON.parse(auth));
+            }
+        };
+
+        fetchCategories();
+        getStaffAuth();
     }, []);
 
     const safeFormatPrice = (priceValue) => {
@@ -91,15 +130,36 @@ export default function Products() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            const auth = getAuth();
+            const now = new Date().toISOString();
+            const productData = {
+                ...newProduct,
+                storeId: auth.currentUser.uid,
+                updatedAt: now
+            };
+    
             if (editingProductId) {
-                await updateDoc(doc(db, 'products', editingProductId), newProduct);
+                productData.updatedBy = {
+                    id: staffAuth.staffId,
+                    name: staffAuth.staffName,
+                    role: staffAuth.accountType
+                };
+                
+                await updateDoc(doc(db, 'products', editingProductId), productData);
                 setProducts(products.map(p => 
-                    p.id === editingProductId ? { ...newProduct, id: editingProductId } : p
+                    p.id === editingProductId ? { ...productData, id: editingProductId } : p
                 ));
                 setSuccessMessage('Product updated successfully');
             } else {
-                const docRef = await addDoc(collection(db, 'products'), newProduct);
-                setProducts([...products, { ...newProduct, id: docRef.id }]);
+                productData.createdAt = now;
+                productData.createdBy = {
+                    id: staffAuth.staffId,
+                    name: staffAuth.staffName,
+                    role: staffAuth.accountType
+                };
+    
+                const docRef = await addDoc(collection(db, 'products'), productData);
+                setProducts([...products, { ...productData, id: docRef.id }]);
                 setSuccessMessage('Product added successfully');
             }
             resetForm();
@@ -110,6 +170,7 @@ export default function Products() {
     };
 
     return (
+        <RouteGuard requiredRoles={['manager']}>
         <div className="flex flex-col min-h-screen p-4 bg-neutral-900 text-neutral-50">
             <h1 className="text-3xl font-bold mb-6">Products Management</h1>
 
@@ -144,19 +205,19 @@ export default function Products() {
                         placeholder="Description"
                         className="p-2 bg-neutral-700 rounded"
                     />
-                    <div className="flex gap-2">
-                        {['Coffee', 'Food', 'Drink'].map(category => (
+                    <div className="flex flex-wrap gap-2">
+                        {categories.map(category => (
                             <button
-                                key={category}
+                                key={category.id}
                                 type="button"
-                                onClick={() => handleCategorySelect(category)}
+                                onClick={() => handleCategorySelect(category.name)}
                                 className={`p-2 rounded ${
-                                    newProduct.category === category 
+                                    newProduct.category === category.name 
                                     ? 'bg-indigo-600' 
                                     : 'bg-neutral-700'
                                 }`}
                             >
-                                {category}
+                                {category.name}
                             </button>
                         ))}
                     </div>
@@ -238,9 +299,21 @@ export default function Products() {
                         ) : (
                             <p className="text-xl">R {safeFormatPrice(product.price)}</p>
                         )}
+                        <div className="mt-4 pt-2 border-t border-neutral-700 text-xs text-neutral-500">
+                            {product.createdBy && (
+                                <p>Created by: {product.createdBy.name}</p>
+                            )}
+                            {product.createdAt && (
+                                <p>Created: {new Date(product.createdAt).toLocaleDateString()}</p>
+                            )}
+                            {product.updatedBy && (
+                                <p>Last updated by: {product.updatedBy.name}</p>
+                            )}
+                        </div>
                     </div>
                 ))}
             </div>
         </div>
+        </RouteGuard>
     );
 }

@@ -5,6 +5,7 @@ import { FaPlus } from 'react-icons/fa';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { getFirestore } from 'firebase/firestore';
 import { auth } from '../../../utils/firebase';
+import RouteGuard from '../../components/RouteGuard';
 
 const getUtcMidnight = (date) => {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -102,6 +103,7 @@ export default function RefundsPage() {
   };
 
   return (
+    <RouteGuard requiredRoles={['admin', 'manager']}>
     <div className="flex flex-col min-h-screen bg-neutral-900 text-neutral-50 p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Refunds: </h1>
@@ -195,5 +197,6 @@ export default function RefundsPage() {
         )}
       </div>
     </div>
+    </RouteGuard>
   );
 }
