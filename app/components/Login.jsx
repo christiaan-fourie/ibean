@@ -1,6 +1,6 @@
 'use client'; // Required for components with hooks like useState
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation'; // Import for redirection
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../utils/firebase'; // Adjust the path to your firebase config file
@@ -11,33 +11,102 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [lockoutTime, setLockoutTime] = useState(0);
   const router = useRouter(); // Hook for navigation
+
+  // Check for existing lockout
+  useEffect(() => {
+    const storedLockout = localStorage.getItem('loginLockout');
+    const storedAttempts = localStorage.getItem('loginAttempts');
+    
+    if (storedLockout) {
+      const lockoutUntil = parseInt(storedLockout);
+      if (lockoutUntil > Date.now()) {
+        setLockoutTime(lockoutUntil);
+      } else {
+        localStorage.removeItem('loginLockout');
+        localStorage.removeItem('loginAttempts');
+      }
+    }
+
+    if (storedAttempts) {
+      setAttempts(parseInt(storedAttempts));
+    }
+  }, []);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (lockoutTime > Date.now()) {
+      const timer = setInterval(() => {
+        if (lockoutTime <= Date.now()) {
+          setLockoutTime(0);
+          setAttempts(0);
+          localStorage.removeItem('loginLockout');
+          localStorage.removeItem('loginAttempts');
+          clearInterval(timer);
+        } else {
+          setLockoutTime(lockoutTime);
+        }
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [lockoutTime]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
+    // Check if locked out
+    if (lockoutTime > Date.now()) {
+      const remainingTime = Math.ceil((lockoutTime - Date.now()) / 1000);
+      setError(`Please wait ${remainingTime} seconds before trying again.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Handle successful login
-      console.log('Login successful!');
-      // Redirect to a dashboard or home page upon successful login
-      router.push('/dashboard'); // Example redirection path
+      // Reset attempts on successful login
+      setAttempts(0);
+      localStorage.removeItem('loginAttempts');
+      localStorage.removeItem('loginLockout');
+      router.push('/dashboard');
     } catch (err) {
       console.error('Login failed:', err);
-      // Provide more user-friendly error messages if possible
-      let errorMessage = 'Failed to log in. Please check your credentials.';
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid email or password.';
-      } else if (err.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address.';
+      
+      // Increment attempts
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      localStorage.setItem('loginAttempts', newAttempts.toString());
+
+      // Check if max attempts reached
+      if (newAttempts >= 3) {
+        const lockoutUntil = Date.now() + (2 * 60 * 1000); // 2 minutes
+        setLockoutTime(lockoutUntil);
+        localStorage.setItem('loginLockout', lockoutUntil.toString());
+        setError('Too many failed attempts. Please try again in 2 minutes.');
+      } else {
+        let errorMessage = `Login failed. ${3 - newAttempts} attempts remaining.`;
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+          errorMessage = `Invalid email or password. ${3 - newAttempts} attempts remaining.`;
+        } else if (err.code === 'auth/invalid-email') {
+          errorMessage = 'Please enter a valid email address.';
+        }
+        setError(errorMessage);
       }
-      // You can add more specific error checks based on Firebase error codes
-      setError(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getRemainingTime = () => {
+    const remaining = Math.ceil((lockoutTime - Date.now()) / 1000);
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -70,7 +139,7 @@ const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={loading}
+              disabled={loading || lockoutTime > Date.now()}
               className="block w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-md shadow-sm placeholder-neutral-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-neutral-100 disabled:opacity-70"
               placeholder="you@example.com"
             />
@@ -88,18 +157,27 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              disabled={loading}
+              disabled={loading || lockoutTime > Date.now()}
               className="block w-full px-3 py-2 bg-neutral-700 border border-neutral-600 rounded-md shadow-sm placeholder-neutral-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm text-neutral-100 disabled:opacity-70"
               placeholder="••••••••"
             />
           </div>
-          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+          {error && (
+            <div className="text-sm text-red-500 text-center">
+              {error}
+              {lockoutTime > Date.now() && (
+                <div className="mt-2 font-medium">
+                  Time remaining: {getRemainingTime()}
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || lockoutTime > Date.now()}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-neutral-800 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Logging in...' : lockoutTime > Date.now() ? 'Locked' : 'Login'}
           </button>
         </form>
       </div>
