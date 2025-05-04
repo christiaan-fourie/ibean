@@ -243,7 +243,7 @@ export default function RootLayout({ children }) {
                                 role="button"
                             >
                                 <span className="text-xl">{item.icon}</span>
-                                {isSidebarOpen && <span className="ml-4">{item.name}</span>}
+                                {isSidebarOpen && <span className="ml-4 text-sm">{item.name}</span>}
                             </Link>
                         ))
                     }
