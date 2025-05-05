@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { FaCheckCircle } from 'react-icons/fa';
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { auth } from '../../utils/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
@@ -11,8 +11,18 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
   const [user] = useAuthState(auth);
   const [staffAuth, setStaffAuth] = useState(null);
   const [error, setError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [cashReceived, setCashReceived] = useState('');
+  const [voucherCode, setVoucherCode] = useState('');
+  const [processing, setProcessing] = useState(false);
 
-  // Get staff authentication on component mount
+  const paymentMethods = [
+    { id: 'card', name: 'Card', icon: '💳' },
+    { id: 'cash', name: 'Cash', icon: '💵' },
+    { id: 'snapscan', name: 'SnapScan', icon: '📱' },
+    { id: 'voucher', name: 'Voucher', icon: '🎫' }
+  ];
+
   useEffect(() => {
     const auth = localStorage.getItem('staffAuth');
     if (auth) {
@@ -24,8 +34,27 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     return null;
   }
 
+  const validateVoucher = async (code) => {
+    try {
+      const vouchersRef = collection(db, 'vouchers');
+      const q = query(vouchersRef, 
+        where('code', '==', code),
+        where('active', '==', true),
+        where('expirationDate', '>', new Date().toISOString())
+      );
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        throw new Error('Invalid or expired voucher code');
+      }
+      
+      return snapshot.docs[0];
+    } catch (error) {
+      throw new Error('Failed to validate voucher');
+    }
+  };
+
   const handleConfirm = async () => {
-    // Validation checks
     if (!user) {
       setError("Store account must be logged in to complete the sale.");
       return;
@@ -36,64 +65,91 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
       return;
     }
 
-    // Calculate various totals
-    const subtotalBeforeDiscounts = orderDetails.reduce((sum, item) => 
-      sum + (parseFloat(item.price) * item.quantity), 0);
-    
-    const totalDiscount = appliedSpecials ? 
-      appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0;
-
-    // Prepare comprehensive sale data
-    const saleData = {
-      // Store Information
-      storeId: user.uid,
-      storeName: user.email,
-      
-      // Staff Information
-      staffId: staffAuth.staffId,
-      staffName: staffAuth.staffName,
-      staffRole: staffAuth.accountType,
-
-      // Timestamp Information
-      timestamp: serverTimestamp(),
-      createdAt: new Date().toISOString(),
-      
-      // Order Details
-      items: orderDetails.map(item => ({
-        id: item.id,
-        name: item.name,
-        size: item.size || null,
-        quantity: parseInt(item.quantity) || 0,
-        price: parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0,
-        subtotal: (parseFloat(item.price) * item.quantity).toFixed(2)
-      })),
-
-      // Special Offers & Discounts
-      appliedSpecials: appliedSpecials ? appliedSpecials.map(special => ({
-        id: special.id || '',
-        name: special.name || '',
-        triggerProduct: special.triggerProduct || '',
-        rewardProduct: special.rewardProduct || '',
-        discountType: special.discountType || 'free',
-        discountValue: parseFloat(special.discountValue) || 0,
-        savedAmount: parseFloat(special.savedAmount) || 0
-      })) : [],
-
-      // Financial Totals
-      subtotalBeforeDiscounts: parseFloat(subtotalBeforeDiscounts.toFixed(2)),
-      totalDiscount: parseFloat(totalDiscount.toFixed(2)),
-      finalTotal: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) || 0,
-
-      // Payment Details
-      paymentMethod: 'card', // Add more payment methods if needed
-      paymentStatus: 'completed',
-
-      // Additional Tracking
-      orderNumber: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      source: 'pos_system'
-    };
-
     try {
+      setProcessing(true);
+
+      if (!paymentMethod) {
+        setError('Please select a payment method');
+        return;
+      }
+
+      if (paymentMethod === 'cash' && parseFloat(cashReceived) < parseFloat(totalPrice)) {
+        setError('Insufficient cash received');
+        return;
+      }
+
+      if (paymentMethod === 'voucher') {
+        if (!voucherCode) {
+          setError('Please enter a voucher code');
+          return;
+        }
+        
+        try {
+          const voucher = await validateVoucher(voucherCode);
+          saleData.voucher = {
+            code: voucherCode,
+            id: voucher.id
+          };
+          
+          await updateDoc(doc(db, 'vouchers', voucher.id), {
+            active: false,
+            usedAt: new Date().toISOString(),
+            usedBy: {
+              staffId: staffAuth.staffId,
+              staffName: staffAuth.staffName
+            }
+          });
+        } catch (error) {
+          setError(error.message);
+          return;
+        }
+      }
+
+      const subtotalBeforeDiscounts = orderDetails.reduce((sum, item) => 
+        sum + (parseFloat(item.price) * item.quantity), 0);
+      
+      const totalDiscount = appliedSpecials ? 
+        appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0;
+
+      const saleData = {
+        storeId: user.uid,
+        storeName: user.email,
+        staffId: staffAuth.staffId,
+        staffName: staffAuth.staffName,
+        staffRole: staffAuth.accountType,
+        timestamp: serverTimestamp(),
+        createdAt: new Date().toISOString(),
+        items: orderDetails.map(item => ({
+          id: item.id,
+          name: item.name,
+          size: item.size || null,
+          quantity: parseInt(item.quantity) || 0,
+          price: parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0,
+          subtotal: (parseFloat(item.price) * item.quantity).toFixed(2)
+        })),
+        appliedSpecials: appliedSpecials ? appliedSpecials.map(special => ({
+          id: special.id || '',
+          name: special.name || '',
+          triggerProduct: special.triggerProduct || '',
+          rewardProduct: special.rewardProduct || '',
+          discountType: special.discountType || 'free',
+          discountValue: parseFloat(special.discountValue) || 0,
+          savedAmount: parseFloat(special.savedAmount) || 0
+        })) : [],
+        subtotalBeforeDiscounts: parseFloat(subtotalBeforeDiscounts.toFixed(2)),
+        totalDiscount: parseFloat(totalDiscount.toFixed(2)),
+        finalTotal: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) || 0,
+        payment: {
+          method: paymentMethod,
+          cashReceived: paymentMethod === 'cash' ? parseFloat(cashReceived) : null,
+          change: paymentMethod === 'cash' ? parseFloat(cashReceived) - parseFloat(totalPrice) : null,
+          processedAt: new Date().toISOString()
+        },
+        paymentStatus: 'completed',
+        orderNumber: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        source: 'pos_system'
+      };
+
       const salesCollectionRef = collection(db, 'sales');
       await addDoc(salesCollectionRef, saleData);
       
@@ -104,7 +160,20 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
 
     } catch (error) {
       console.error("Error recording sale: ", error);
-      setError(`Error recording sale: ${error.message}`);
+      setError(`Error processing payment: ${error.message}`);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const getPaymentButtonText = () => {
+    if (!staffAuth) return 'Staff Login Required';
+    switch (paymentMethod) {
+      case 'card': return 'Process Card Payment';
+      case 'cash': return 'Complete Cash Payment';
+      case 'snapscan': return 'Confirm SnapScan Payment';
+      case 'voucher': return 'Redeem Voucher';
+      default: return 'Select Payment Method';
     }
   };
 
@@ -114,13 +183,11 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         <div className="flex flex-col items-center text-center">
           <h2 className="text-2xl font-bold mb-6">Complete Sale</h2>
 
-          {/* Staff & Store Info */}
           <div className="w-full bg-neutral-900 p-2 rounded-md mb-4 text-sm">
             <p>Store: {user?.email}</p>
             <p>Staff: {staffAuth?.staffName} ({staffAuth?.accountType})</p>
           </div>
 
-          {/* Order Summary */}
           <div className="w-full bg-neutral-700 p-4 rounded-md mb-4 max-h-48 overflow-y-auto">
             <h3 className="text-lg font-semibold mb-2 text-left">Your Order:</h3>
             <ul className="text-sm text-left space-y-1">
@@ -132,7 +199,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
               ))}
             </ul>
 
-            {/* Display Applied Specials */}
             {appliedSpecials.length > 0 && (
               <>
                 <hr className="my-2 border-neutral-600"/>
@@ -155,21 +221,73 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
             </div>
           </div>
 
+          <div className="w-full mb-4">
+            <h3 className="text-lg font-semibold mb-2 text-left">Payment Method</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {paymentMethods.map((method) => (
+                <button
+                  key={method.id}
+                  onClick={() => setPaymentMethod(method.id)}
+                  className={`p-3 rounded-md flex items-center justify-center gap-2 transition-colors
+                    ${paymentMethod === method.id 
+                      ? 'bg-indigo-600 hover:bg-indigo-700' 
+                      : 'bg-neutral-700 hover:bg-neutral-600'}`}
+                >
+                  <span>{method.icon}</span>
+                  <span>{method.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {paymentMethod === 'cash' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Cash Received</label>
+              <input
+                type="number"
+                value={cashReceived}
+                onChange={(e) => setCashReceived(e.target.value)}
+                className="w-full p-2 bg-neutral-700 rounded"
+                placeholder="Enter amount"
+                step="0.01"
+                min={totalPrice}
+              />
+              {cashReceived && parseFloat(cashReceived) >= parseFloat(totalPrice) && (
+                <div className="mt-2 text-green-400">
+                  Change: R {(parseFloat(cashReceived) - parseFloat(totalPrice)).toFixed(2)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {paymentMethod === 'voucher' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Voucher Code</label>
+              <input
+                type="text"
+                value={voucherCode}
+                onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                className="w-full p-2 bg-neutral-700 rounded"
+                placeholder="Enter voucher code"
+                maxLength="8"
+              />
+            </div>
+          )}
+
           {error && (
             <div className="w-full bg-red-600/20 border border-red-500 text-red-100 p-3 rounded-md mb-4">
               {error}
             </div>
           )}
 
-          {/* Action Buttons */}
           <button
             onClick={handleConfirm}
-            disabled={!staffAuth || !user}
+            disabled={!staffAuth || !user || !paymentMethod || processing}
             className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 
               focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 mb-4
               disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {!staffAuth ? 'Staff Login Required' : 'Charge Card'}
+            {processing ? 'Processing...' : getPaymentButtonText()}
           </button>
           
           <button
