@@ -13,6 +13,7 @@ export default function Categories() {
         name: '',
         description: '',
         active: true,
+        varieties: [], // Add varieties array
         createdBy: null,
         storeId: null,
         createdAt: null,
@@ -67,6 +68,7 @@ export default function Categories() {
             name: '',
             description: '',
             active: true,
+            varieties: [], // Reset varieties array
             createdBy: null,
             storeId: null,
             createdAt: null,
@@ -84,6 +86,7 @@ export default function Categories() {
             name: category.name,
             description: category.description || '',
             active: category.active ?? true,
+            varieties: category.varieties || [], // Include varieties
             createdBy: category.createdBy || null,
             storeId: category.storeId || null,
             createdAt: category.createdAt || null,
@@ -181,6 +184,21 @@ export default function Categories() {
                         className="p-2 bg-neutral-700 rounded"
                     />
                 </div>
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-neutral-300 mb-2">
+                        Varieties (one per line)
+                    </label>
+                    <textarea
+                        name="varieties"
+                        value={Array.isArray(newCategory.varieties) ? newCategory.varieties.join('\n') : ''}
+                        onChange={(e) => setNewCategory(prev => ({
+                            ...prev,
+                            varieties: e.target.value.split('\n').filter(v => v.trim())
+                        }))}
+                        placeholder="Enter varieties (e.g., Solo, Short, Tall)"
+                        className="w-full p-2 bg-neutral-700 rounded min-h-[100px]"
+                    />
+                </div>
                 <div className="flex items-center gap-2 mb-4">
                     <input
                         type="checkbox"
@@ -220,6 +238,13 @@ export default function Categories() {
                             <div>
                                 <h3 className="text-xl font-bold">{category.name}</h3>
                                 <p className="text-neutral-400">{category.description}</p>
+                                {category.varieties && category.varieties.length > 0 && (
+                                    <ul className="mt-2 text-neutral-400 text-sm">
+                                        {category.varieties.map((variety, index) => (
+                                            <li key={index}>- {variety}</li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className={`px-2 py-1 rounded text-sm ${

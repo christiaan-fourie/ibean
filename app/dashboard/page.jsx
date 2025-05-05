@@ -68,7 +68,7 @@ export default function DashboardHome() {
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       
       // Enhanced context with staff information
-      const context = `You are an AI assistant for the Chilzone coffee shop's dashboard POS system (called iBean). 
+      const context = `You are an AI assistant for the Chilzone coffee shop's dashboard POS system (called iBean). Located in South Africa Using Rand (R).
         You are currently helping ${staffAuth.staffName} who is a ${staffAuth.accountType}.
 
         ${staffAuth.accountType === 'manager' 

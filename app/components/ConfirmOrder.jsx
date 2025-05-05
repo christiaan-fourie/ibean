@@ -1,41 +1,74 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { FaCheckCircle } from 'react-icons/fa';
-// Firebase imports
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { auth } from '../../utils/firebase'; // Adjust path if needed
+import { auth } from '../../utils/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { useStore } from '../context/StoreContext';
 
-// Component receives order details, total price, applied specials, and a close handler
 const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) => {
-  const db = getFirestore(); // Get Firestore instance
-  const [user] = useAuthState(auth); // Get current user
-  const { selectedStore } = useStore(); // Get selected store from context
+  const db = getFirestore();
+  const [user] = useAuthState(auth);
+  const [staffAuth, setStaffAuth] = useState(null);
+  const [error, setError] = useState('');
+
+  // Get staff authentication on component mount
+  useEffect(() => {
+    const auth = localStorage.getItem('staffAuth');
+    if (auth) {
+      setStaffAuth(JSON.parse(auth));
+    }
+  }, []);
 
   if (!orderDetails || orderDetails.length === 0) {
-    return null; // Don't render if there's no order
+    return null;
   }
 
-  // Function to handle the confirmation and database write
   const handleConfirm = async () => {
+    // Validation checks
     if (!user) {
-      alert("You must be logged in to complete the sale.");
+      setError("Store account must be logged in to complete the sale.");
       return;
     }
 
+    if (!staffAuth) {
+      setError("Staff member must be logged in to complete the sale.");
+      return;
+    }
+
+    // Calculate various totals
+    const subtotalBeforeDiscounts = orderDetails.reduce((sum, item) => 
+      sum + (parseFloat(item.price) * item.quantity), 0);
+    
+    const totalDiscount = appliedSpecials ? 
+      appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0;
+
+    // Prepare comprehensive sale data
     const saleData = {
+      // Store Information
+      storeId: user.uid,
+      storeName: user.email,
+      
+      // Staff Information
+      staffId: staffAuth.staffId,
+      staffName: staffAuth.staffName,
+      staffRole: staffAuth.accountType,
+
+      // Timestamp Information
       timestamp: serverTimestamp(),
-      userId: user.uid,
-      username: user.displayName || user.email,
+      createdAt: new Date().toISOString(),
+      
+      // Order Details
       items: orderDetails.map(item => ({
         id: item.id,
         name: item.name,
-        size: item.size || null, // Provide default value
-        quantity: parseInt(item.quantity) || 0, // Ensure number
-        price: parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0 // Better price parsing
+        size: item.size || null,
+        quantity: parseInt(item.quantity) || 0,
+        price: parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0,
+        subtotal: (parseFloat(item.price) * item.quantity).toFixed(2)
       })),
+
+      // Special Offers & Discounts
       appliedSpecials: appliedSpecials ? appliedSpecials.map(special => ({
         id: special.id || '',
         name: special.name || '',
@@ -45,29 +78,33 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         discountValue: parseFloat(special.discountValue) || 0,
         savedAmount: parseFloat(special.savedAmount) || 0
       })) : [],
-      totalDiscount: appliedSpecials ? 
-        appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0,
-      subtotalBeforeDiscounts: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) + 
-        (appliedSpecials ? 
-          appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0) : 0),
-      totalPrice: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) || 0,
-      storeName: selectedStore || 'Unknown Store',
-      createdAt: new Date().toISOString() // Add timestamp for tracking
+
+      // Financial Totals
+      subtotalBeforeDiscounts: parseFloat(subtotalBeforeDiscounts.toFixed(2)),
+      totalDiscount: parseFloat(totalDiscount.toFixed(2)),
+      finalTotal: parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) || 0,
+
+      // Payment Details
+      paymentMethod: 'card', // Add more payment methods if needed
+      paymentStatus: 'completed',
+
+      // Additional Tracking
+      orderNumber: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      source: 'pos_system'
     };
 
     try {
       const salesCollectionRef = collection(db, 'sales');
-
       await addDoc(salesCollectionRef, saleData);
-
-      console.log("Sale recorded successfully!");
-      localStorage.removeItem('orderDetails'); // Clear order details from local storage
-      window.location.reload(); // Refresh the page to update the order list
-      onClose(); // Close the modal after successful recording
+      
+      console.log("Sale recorded successfully!", saleData);
+      localStorage.removeItem('orderDetails');
+      window.location.reload();
+      onClose();
 
     } catch (error) {
       console.error("Error recording sale: ", error);
-      alert(`Error recording sale: ${error.message}`);
+      setError(`Error recording sale: ${error.message}`);
     }
   };
 
@@ -77,7 +114,13 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         <div className="flex flex-col items-center text-center">
           <h2 className="text-2xl font-bold mb-6">Complete Sale</h2>
 
-          {/* Order Summary in Modal */}
+          {/* Staff & Store Info */}
+          <div className="w-full bg-neutral-900 p-2 rounded-md mb-4 text-sm">
+            <p>Store: {user?.email}</p>
+            <p>Staff: {staffAuth?.staffName} ({staffAuth?.accountType})</p>
+          </div>
+
+          {/* Order Summary */}
           <div className="w-full bg-neutral-700 p-4 rounded-md mb-4 max-h-48 overflow-y-auto">
             <h3 className="text-lg font-semibold mb-2 text-left">Your Order:</h3>
             <ul className="text-sm text-left space-y-1">
@@ -112,17 +155,27 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
             </div>
           </div>
 
-          {/* Charge Card Button */}
+          {error && (
+            <div className="w-full bg-red-600/20 border border-red-500 text-red-100 p-3 rounded-md mb-4">
+              {error}
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <button
-            onClick={handleConfirm} // Call handleConfirm on click
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 mb-4"
+            onClick={handleConfirm}
+            disabled={!staffAuth || !user}
+            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 
+              focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 mb-4
+              disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Charge Card
+            {!staffAuth ? 'Staff Login Required' : 'Charge Card'}
           </button>
-          {/* Cancel Button */}
+          
           <button
-            onClick={onClose} // Keep onClose for the Cancel button
-            className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            onClick={onClose}
+            className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 
+              focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
           >
             Cancel
           </button>

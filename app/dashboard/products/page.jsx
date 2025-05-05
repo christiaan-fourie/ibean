@@ -7,20 +7,17 @@ import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import RouteGuard from '../../components/RouteGuard';
 
-
-// Define coffee sizes
-const COFFEE_SIZES = ['Solo', 'Short', 'Tall', 'Black'];
-
 export default function Products() {
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [selectedCategory, setSelectedCategory] = useState(null);
     const [staffAuth, setStaffAuth] = useState(null);
     const [newProduct, setNewProduct] = useState({
         name: '',
-        price: '',
-        sizes: {},
         description: '',
         category: '',
+        price: '', // Add single price field
+        varietyPrices: {},
         createdBy: null,
         storeId: null,
         createdAt: null,
@@ -49,7 +46,6 @@ export default function Products() {
         fetchProducts();
     }, []);
 
-    // Add after existing useEffect
     useEffect(() => {
         const fetchCategories = async () => {
             try {
@@ -91,22 +87,29 @@ export default function Products() {
         }));
     };
 
-    const handleCategorySelect = (category) => {
+    const handleCategorySelect = (categoryName) => {
+        const category = categories.find(c => c.name === categoryName);
+        setSelectedCategory(category);
         setNewProduct(prev => ({
             ...prev,
-            category,
-            price: '',
-            sizes: category === 'Coffee' ? {} : ''
+            category: categoryName,
+            price: '', // Reset single price
+            varietyPrices: {} // Reset variety prices
         }));
     };
 
     const resetForm = () => {
         setNewProduct({
             name: '',
-            price: '',
-            sizes: {},
             description: '',
-            category: ''
+            category: '',
+            price: '',
+            varietyPrices: {},
+            createdBy: null,
+            storeId: null,
+            createdAt: null,
+            updatedAt: null,
+            updatedBy: null
         });
         setEditingProductId(null);
     };
@@ -186,18 +189,29 @@ export default function Products() {
                         className="p-2 bg-neutral-700 rounded"
                         required
                     />
-                    {newProduct.category !== 'Coffee' && (
-                        <input
-                            type="number"
-                            name="price"
-                            value={newProduct.price}
-                            onChange={handleChange}
-                            placeholder="Price"
-                            step="0.01"
-                            className="p-2 bg-neutral-700 rounded"
-                            required
-                        />
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                        {categories.length === 0 ? (
+                            <p className="text-neutral-400">Loading categories...</p>
+                        ) : (
+                            categories.map(category => (
+                                <button
+                                    key={category.id}
+                                    type="button"
+                                    onClick={() => handleCategorySelect(category.name)}
+                                    className={`p-2 rounded transition-colors ${
+                                        newProduct.category === category.name 
+                                        ? 'bg-indigo-600 hover:bg-indigo-700' 
+                                        : 'bg-neutral-700 hover:bg-neutral-600'
+                                    }`}
+                                >
+                                    {category.name}
+                                    {newProduct.category === category.name && (
+                                        <FaCheckCircle className="inline-block ml-2" />
+                                    )}
+                                </button>
+                            ))
+                        )}
+                    </div>
                     <textarea
                         name="description"
                         value={newProduct.description}
@@ -205,50 +219,60 @@ export default function Products() {
                         placeholder="Description"
                         className="p-2 bg-neutral-700 rounded"
                     />
-                    <div className="flex flex-wrap gap-2">
-                        {categories.map(category => (
-                            <button
-                                key={category.id}
-                                type="button"
-                                onClick={() => handleCategorySelect(category.name)}
-                                className={`p-2 rounded ${
-                                    newProduct.category === category.name 
-                                    ? 'bg-indigo-600' 
-                                    : 'bg-neutral-700'
-                                }`}
-                            >
-                                {category.name}
-                            </button>
-                        ))}
-                    </div>
+                    
                 </div>
 
-                {newProduct.category === 'Coffee' && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        {COFFEE_SIZES.map(size => (
-                            <div key={size} className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    name={`sizes.${size}`}
-                                    value={newProduct.sizes[size] || ''}
-                                    onChange={(e) => {
-                                        setNewProduct(prev => ({
-                                            ...prev,
-                                            sizes: {
-                                                ...prev.sizes,
-                                                [size]: e.target.value
-                                            }
-                                        }));
-                                    }}
-                                    placeholder={`${size} Price`}
-                                    step="0.01"
-                                    className="p-2 bg-neutral-700 rounded w-full"
-                                />
-                            </div>
-                        ))}
+                {selectedCategory?.varieties?.length > 0 ? (
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-neutral-300 mb-2">
+                            Variety Prices
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            {selectedCategory.varieties.map(variety => (
+                                <div key={variety} className="flex flex-col gap-1">
+                                    <label className="text-sm text-neutral-400">{variety}</label>
+                                    <input
+                                        type="number"
+                                        value={newProduct.varietyPrices[variety] || ''}
+                                        onChange={(e) => {
+                                            setNewProduct(prev => ({
+                                                ...prev,
+                                                varietyPrices: {
+                                                    ...prev.varietyPrices,
+                                                    [variety]: e.target.value
+                                                }
+                                            }));
+                                        }}
+                                        placeholder={`Price for ${variety}`}
+                                        step="0.01"
+                                        min="0"
+                                        className="p-2 bg-neutral-700 rounded w-full"
+                                        required
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-neutral-300 mb-2">
+                            Price
+                        </label>
+                        <input
+                            type="number"
+                            name="price"
+                            value={newProduct.price}
+                            onChange={handleChange}
+                            placeholder="Product Price"
+                            step="0.01"
+                            min="0"
+                            className="p-2 bg-neutral-700 rounded w-full"
+                            required={!selectedCategory?.varieties?.length}
+                        />
                     </div>
                 )}
 
+                
                 <button
                     type="submit"
                     className="w-full p-2 bg-indigo-600 hover:bg-indigo-700 rounded"
@@ -287,17 +311,21 @@ export default function Products() {
                             </div>
                         </div>
                         <p className="text-neutral-400 mb-2">{product.description}</p>
-                        {product.category === 'Coffee' ? (
-                            <div className="grid grid-cols-2 gap-2">
-                                {Object.entries(product.sizes).map(([size, price]) => (
-                                    <div key={size} className="flex justify-between">
-                                        <span>{size}</span>
-                                        <span>R {safeFormatPrice(price)}</span>
+                        {product.varietyPrices && Object.keys(product.varietyPrices).length > 0 ? (
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                {Object.entries(product.varietyPrices).map(([variety, price]) => (
+                                    <div key={variety} className="flex justify-between items-center p-2 bg-neutral-700 rounded">
+                                        <span className="font-medium">{variety}</span>
+                                        <span className="text-indigo-400">R {safeFormatPrice(price)}</span>
                                     </div>
                                 ))}
                             </div>
+                        ) : product.price ? (
+                            <div className="p-2 bg-neutral-700 rounded mt-2">
+                                <span className="text-indigo-400 text-xl">R {safeFormatPrice(product.price)}</span>
+                            </div>
                         ) : (
-                            <p className="text-xl">R {safeFormatPrice(product.price)}</p>
+                            <p className="text-red-400 mt-2">No price set</p>
                         )}
                         <div className="mt-4 pt-2 border-t border-neutral-700 text-xs text-neutral-500">
                             {product.createdBy && (
