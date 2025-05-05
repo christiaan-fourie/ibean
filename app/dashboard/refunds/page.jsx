@@ -1,202 +1,241 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { FaPlus } from 'react-icons/fa';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { getFirestore } from 'firebase/firestore';
-import { auth } from '../../../utils/firebase';
+import { useState, useEffect } from 'react';
+import { collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth } from '../../../utils/firebase';
 
-const getUtcMidnight = (date) => {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-};
+export default function Refunds() {
+    const [user] = useAuthState(auth);
+    const [refunds, setRefunds] = useState([]);
+    const [staffAuth, setStaffAuth] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
 
-export default function RefundsPage() {
-  const [selectedDate, setSelectedDate] = useState(getUtcMidnight(new Date()));
-  const [dailyRefunds, setDailyRefunds] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newRefundReason, setNewRefundReason] = useState('');
-  const [newRefundAmount, setNewRefundAmount] = useState('');
-  const [addError, setAddError] = useState('');
-  const [addSuccess, setAddSuccess] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
-
-  const [user] = useAuthState(auth);
-  const db = getFirestore();
-  const dateInputRef = useRef(null);
-
-  const formatDateDisplay = (date) => {
-    return date.toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      timeZone: 'UTC'
+    const [newRefund, setNewRefund] = useState({
+        productName: '',
+        amount: '',
+        reason: '',
+        refundMethod: 'cash', // cash, store_credit
+        createdBy: null,
+        storeId: null,
+        createdAt: null
     });
-  };
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      hour12: false 
-    });
-  };
+    // Get staff authentication
+    useEffect(() => {
+        const auth = localStorage.getItem('staffAuth');
+        if (auth) {
+            setStaffAuth(JSON.parse(auth));
+        }
+    }, []);
 
-  const formatPrice = (price) => {
-    const numericPrice = typeof price === 'number' ? price : parseFloat(String(price).replace(/[^\d.-]/g, '') || 0);
-    return `R ${numericPrice.toFixed(2)}`;
-  };
+    // Fetch existing refunds
+    useEffect(() => {
+        const fetchRefunds = async () => {
+            try {
+                const q = query(
+                    collection(db, 'refunds'),
+                    orderBy('createdAt', 'desc')
+                );
+                const querySnapshot = await getDocs(q);
+                const refundsData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setRefunds(refundsData);
+            } catch (error) {
+                console.error('Error fetching refunds:', error);
+                setError('Failed to load refunds');
+            }
+        };
 
-  const totalRefundsValue = useMemo(() => {
-    return dailyRefunds.reduce((sum, refund) => sum + parseFloat(refund.amount), 0);
-  }, [dailyRefunds]);
+        fetchRefunds();
+    }, []);
 
-  const handleDateChange = (event) => {
-    const dateValue = event.target.value;
-    if (dateValue) {
-      const [year, month, day] = dateValue.split('-').map(Number);
-      setSelectedDate(new Date(Date.UTC(year, month - 1, day)));
-    }
-  };
-
-  const getInputValue = (date) => {
-    const year = date.getUTCFullYear();
-    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = date.getUTCDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const handleAddRefund = async (e) => {
-    e.preventDefault();
-    setAddError('');
-    setAddSuccess('');
-
-    if (!user) {
-      setAddError('You must be logged in to add refunds');
-      return;
-    }
-
-    if (!newRefundReason.trim()) {
-      setAddError('Please provide a reason for the refund');
-      return;
-    }
-
-    const amountValue = parseFloat(newRefundAmount);
-    if (isNaN(amountValue) || amountValue <= 0) {
-      setAddError('Please enter a valid refund amount');
-      return;
-    }
-
-    setIsAdding(true);
     
-    try {
-      // Add your Firebase logic here to save the refund
-      setAddSuccess('Refund added successfully');
-      setNewRefundReason('');
-      setNewRefundAmount('');
-    } catch (err) {
-      setAddError('Failed to add refund: ' + err.message);
-    } finally {
-      setIsAdding(false);
-    }
-  };
+    // Process refund
+    const handleSubmitRefund = async (e) => {
+        e.preventDefault();
+        if (!newRefund.productName || !newRefund.amount || !newRefund.reason) {
+            setError('Please fill in all required fields');
+            return;
+        }
 
-  return (
-    <RouteGuard requiredRoles={['admin', 'manager']}>
-    <div className="flex flex-col min-h-screen bg-neutral-900 text-neutral-50 p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Refunds: </h1>
-        <input
-          type="date"
-          ref={dateInputRef}
-          onChange={handleDateChange}
-          value={getInputValue(selectedDate)}
-          className="px-4 py-2 bg-neutral-800 rounded border border-neutral-700 text-white"
-        />
-      </div>
+        setLoading(true);
+        setError('');
+        setSuccess('');
 
-      {/* Add Refund Form */}
-      <div className="mb-6 p-4 border border-neutral-700 rounded-lg bg-neutral-800">
-        <h2 className="text-xl font-semibold mb-4">Add New Refund</h2>
-        <form onSubmit={handleAddRefund} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <input
-              type="text"
-              value={newRefundReason}
-              onChange={(e) => setNewRefundReason(e.target.value)}
-              placeholder="Refund reason"
-              className="w-full p-2 bg-neutral-700 rounded border border-neutral-600"
-            />
-          </div>
-          <div>
-            <input
-              type="number"
-              value={newRefundAmount}
-              onChange={(e) => setNewRefundAmount(e.target.value)}
-              placeholder="Amount (R)"
-              step="0.01"
-              min="0.01"
-              className="w-full p-2 bg-neutral-700 rounded border border-neutral-600"
-            />
-          </div>
-          <div className="md:col-span-3">
-            <button
-              type="submit"
-              disabled={isAdding}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white"
-            >
-              <FaPlus /> {isAdding ? 'Adding...' : 'Add Refund'}
-            </button>
-          </div>
-        </form>
-        {addError && <p className="mt-3 text-red-400">{addError}</p>}
-        {addSuccess && <p className="mt-3 text-green-400">{addSuccess}</p>}
-      </div>
+        try {
+            const refundData = {
+                ...newRefund,
+                amount: parseFloat(newRefund.amount),
+                createdAt: new Date().toISOString(),
+                createdBy: {
+                    id: staffAuth.staffId,
+                    name: staffAuth.staffName,
+                    role: staffAuth.accountType
+                },
+                storeId: user.uid,
+                storeName: user.email
+            };
 
-      {/* Refunds List */}
-      <div className="flex-grow">
-        {isLoading ? (
-          <div className="text-center py-8">Loading refunds...</div>
-        ) : error ? (
-          <div className="text-center text-red-500 py-8">{error}</div>
-        ) : dailyRefunds.length === 0 ? (
-          <div className="text-center text-neutral-500 py-8">
-            No refunds recorded for {formatDateDisplay(selectedDate)}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-neutral-800">
-                <tr>
-                  <th className="px-4 py-2 text-left">Time</th>
-                  <th className="px-4 py-2 text-left">Reason</th>
-                  <th className="px-4 py-2 text-left">Processed By</th>
-                  <th className="px-4 py-2 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-700">
-                {dailyRefunds.map((refund) => (
-                  <tr key={refund.id} className="hover:bg-neutral-750">
-                    <td className="px-4 py-2">{formatTime(refund.timestamp)}</td>
-                    <td className="px-4 py-2">{refund.reason}</td>
-                    <td className="px-4 py-2">{refund.username}</td>
-                    <td className="px-4 py-2 text-right text-red-400">
-                      {formatPrice(refund.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="mt-4 text-right">
-              <p className="text-xl font-bold">
-                Total Refunds: {formatPrice(totalRefundsValue)}
-              </p>
+            await addDoc(collection(db, 'refunds'), refundData);
+            setSuccess('Refund processed successfully');
+            
+            // Reset form
+            setNewRefund({
+                productName: '',
+                amount: '',
+                reason: '',
+                refundMethod: 'cash',
+                createdBy: null,
+                storeId: null,
+                createdAt: null
+            });
+        } catch (error) {
+            console.error('Error processing refund:', error);
+            setError('Failed to process refund');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <RouteGuard requiredRoles={['manager']}>
+            <div className="min-h-screen bg-neutral-900 p-8">
+                <div className="max-w-4xl mx-auto">
+                    <h1 className="text-3xl font-bold text-white mb-8">Refund Management</h1>
+
+                    {/* Add Refund Form */}
+                    <div className="mb-8 p-4 bg-neutral-800 rounded-lg">
+                        <h2 className="text-xl font-semibold text-white mb-4">Process New Refund</h2>
+                        <form onSubmit={handleSubmitRefund} className="grid grid-cols-1 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-300 mb-1">
+                                    Product Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newRefund.productName}
+                                    onChange={(e) => setNewRefund(prev => ({ 
+                                        ...prev, 
+                                        productName: e.target.value 
+                                    }))}
+                                    className="w-full p-2 bg-neutral-700 rounded text-white"
+                                    required
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-300 mb-1">
+                                    Refund Amount (R)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={newRefund.amount}
+                                    onChange={(e) => setNewRefund(prev => ({ 
+                                        ...prev, 
+                                        amount: e.target.value 
+                                    }))}
+                                    step="0.01"
+                                    min="0"
+                                    className="w-full p-2 bg-neutral-700 rounded text-white"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-300 mb-1">
+                                    Refund Method
+                                </label>
+                                <select
+                                    value={newRefund.refundMethod}
+                                    onChange={(e) => setNewRefund(prev => ({ 
+                                        ...prev, 
+                                        refundMethod: e.target.value 
+                                    }))}
+                                    className="w-full p-2 bg-neutral-700 rounded text-white"
+                                    required
+                                >
+                                    <option value="cash">Cash</option>
+                                    <option value="store_credit">Store Credit</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-300 mb-1">
+                                    Reason for Refund
+                                </label>
+                                <textarea
+                                    value={newRefund.reason}
+                                    onChange={(e) => setNewRefund(prev => ({ 
+                                        ...prev, 
+                                        reason: e.target.value 
+                                    }))}
+                                    className="w-full p-2 bg-neutral-700 rounded text-white"
+                                    rows="3"
+                                    required
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full p-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                {loading ? 'Processing...' : 'Process Refund'}
+                            </button>
+                        </form>
+                    </div>
+
+                    
+                    {/* Messages */}
+                    {error && <div className="mb-4 p-3 bg-red-600/20 border border-red-500 rounded text-white">{error}</div>}
+                    {success && <div className="mb-4 p-3 bg-green-600/20 border border-green-500 rounded text-white">{success}</div>}
+
+                    {/* Refunds List */}
+                    <div className="mt-8">
+                        <h2 className="text-xl font-semibold text-white mb-4">
+                            Recent Refunds 
+                        </h2>
+                        <div className="grid gap-4">
+                            {refunds.length > 0 ? (
+                                refunds.map(refund => (
+                                    <div key={refund.id} className="p-4 bg-neutral-800 rounded-lg">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="text-white font-medium">{refund.productName}</p>
+                                                <p className="text-sm text-neutral-400">
+                                                    Amount: R {typeof refund.amount === 'number' ? refund.amount.toFixed(2) : refund.amount}
+                                                </p>
+                                                <p className="text-sm text-neutral-400">
+                                                    Method: {refund.refundMethod}
+                                                </p>
+                                            </div>
+                                            <div className="text-right text-sm text-neutral-500">
+                                                <p className="text-indigo-400">Processed by: {refund.createdBy.name}</p>
+                                                <p>{new Date(refund.createdAt).toLocaleDateString()}</p>
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-sm text-neutral-400">
+                                            Reason: {refund.reason}
+                                        </p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-neutral-400 text-center py-4">
+                                    {searchQuery ? 'No refunds found matching your search' : 'No refunds recorded yet'}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
-    </RouteGuard>
-  );
+        </RouteGuard>
+    );
 }

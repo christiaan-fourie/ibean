@@ -6,7 +6,6 @@ import { getFirestore, collection, query, where, orderBy, getDocs, addDoc, Times
 import { auth } from '../../utils/firebase'; // Adjust path if needed
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { FaPlus } from 'react-icons/fa'; // Icon for add button
-import { useStore } from '../context/StoreContext';
 
 // Helper function to get the start of a day in UTC (same as in Sales.jsx)
 const getUtcMidnight = (date) => {

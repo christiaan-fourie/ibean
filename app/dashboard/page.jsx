@@ -30,6 +30,8 @@ export default function DashboardHome() {
         const productsData = [];
         const specialsData = [];
         const staffData = [];
+        const refundData = [];
+        const voucherData = [];
 
         // Fetch sales
         const salesSnapshot = await getDocs(collection(db, 'sales'));
@@ -46,6 +48,14 @@ export default function DashboardHome() {
         // Fetch staff
         const staffSnapshot = await getDocs(collection(db, 'staff'));
         staffSnapshot.forEach(doc => staffData.push({ id: doc.id, ...doc.data() }));
+
+        // Fetch refunds
+        const refundsSnapshot = await getDocs(collection(db, 'refunds'));
+        refundsSnapshot.forEach(doc => refundData.push({ id: doc.id, ...doc.data() }));
+
+        // Fetch vouchers
+        const vouchersSnapshot = await getDocs(collection(db, 'vouchers'));
+        vouchersSnapshot.forEach(doc => voucherData.push({ id: doc.id, ...doc.data() }));
 
         setStoreData({ sales: salesData, products: productsData, specials: specialsData, staff: staffData });
       } catch (error) {
@@ -80,6 +90,8 @@ export default function DashboardHome() {
         Sales: ${JSON.stringify(storeData.sales)}
         Specials: ${JSON.stringify(storeData.specials)}
         Staff: ${JSON.stringify(storeData.staff)}
+        Vouchers: ${JSON.stringify(storeData.vouchers)}
+        Refunds: ${JSON.stringify(storeData.refunds)}
         
         Current date: ${new Date().toLocaleDateString()}
 
