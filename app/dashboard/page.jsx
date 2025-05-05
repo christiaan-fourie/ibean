@@ -56,8 +56,9 @@ export default function DashboardHome() {
         // Fetch vouchers
         const vouchersSnapshot = await getDocs(collection(db, 'vouchers'));
         vouchersSnapshot.forEach(doc => voucherData.push({ id: doc.id, ...doc.data() }));
+        
 
-        setStoreData({ sales: salesData, products: productsData, specials: specialsData, staff: staffData });
+        setStoreData({ sales: salesData, products: productsData, specials: specialsData, staff: staffData, vouchers: voucherData, refunds: refundData });
       } catch (error) {
         console.error('Error fetching store data:', error);
       }
