@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import db from '../../utils/firebase'; // Adjust path if needed
+import db from '../../utils/firebase'; 
 import { collection, getDocs } from 'firebase/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+
+import DOMPurify from 'isomorphic-dompurify';
 
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
 
@@ -80,26 +82,61 @@ export default function DashboardHome() {
       
       // Enhanced context with staff information
       const context = `You are an AI assistant for the Chilzone coffee shop's dashboard POS system (called iBean). Located in South Africa Using Rand (R).
-        You are currently helping ${staffAuth.staffName} who is a ${staffAuth.accountType}.
+You are currently helping ${staffAuth.staffName} who is a ${staffAuth.accountType}.
 
-        ${staffAuth.accountType === 'manager' 
-          ? 'As a manager, they have full access to all store data and management functions.'
-          : 'As a staff member, they focus mainly on sales and basic store operations.'}
+${staffAuth.accountType === 'manager' 
+  ? 'As a manager, they have full access to all store data and management functions.'
+  : 'As a staff member, they focus mainly on sales and basic store operations.'}
 
-        Current store data:
-        Products: ${JSON.stringify(storeData.products)}
-        Sales: ${JSON.stringify(storeData.sales)}
-        Specials: ${JSON.stringify(storeData.specials)}
-        Staff: ${JSON.stringify(storeData.staff)}
-        Vouchers: ${JSON.stringify(storeData.vouchers)}
-        Refunds: ${JSON.stringify(storeData.refunds)}
-        
-        Current date: ${new Date().toLocaleDateString()}
+Current store data:
+Products: ${JSON.stringify(storeData.products)}
+Sales: ${JSON.stringify(storeData.sales)}
+Specials: ${JSON.stringify(storeData.specials)}
+Staff: ${JSON.stringify(storeData.staff)}
+Vouchers: ${JSON.stringify(storeData.vouchers)}
+Refunds: ${JSON.stringify(storeData.refunds)}
 
-        Please provide relevant information based on their role. For staff members, focus on sales and product information.
-        For managers, include detailed analysis and management insights.
+Current date: ${new Date().toLocaleDateString()}
 
-        Question: ${userInput}`;
+Please provide rich, formatted responses using HTML and inline styles. You can use:
+
+Tables:
+<table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+  <thead style="background-color: #1f2937;">
+    <tr>
+      <th style="padding: 8px; border: 1px solid #374151; color: #ffffff;">Header 1</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background-color: #111827;">
+      <td style="padding: 8px; border: 1px solid #374151;">Data 1</td>
+    </tr>
+  </tbody>
+</table>
+
+Styled Elements:
+- <div style="background-color: #1f2937; padding: 10px; border-radius: 5px; margin: 10px 0;">Boxes</div>
+- <span style="color: #10b981;">Success Text</span>
+- <span style="color: #ef4444;">Error Text</span>
+- <span style="color: #f59e0b;">Warning Text</span>
+- <span style="font-size: 1.25em; font-weight: bold;">Large Bold Text</span>
+
+Lists:
+<ul style="list-style-type: none; padding: 0;">
+  <li style="margin: 5px 0; padding: 5px; background-color: #1f2937; border-radius: 3px;">✓ List Item</li>
+</ul>
+
+Stats:
+<div style="display: flex; gap: 10px; justify-content: space-between; margin: 10px 0;">
+  <div style="background-color: #1f2937; padding: 10px; border-radius: 5px; flex: 1; text-align: center;">
+    <div style="font-size: 1.5em; font-weight: bold;">100</div>
+    <div style="color: #9ca3af;">Label</div>
+  </div>
+</div>
+
+Format data appropriately based on the context and make it visually appealing.
+
+Question: ${userInput}`;
 
       const result = await model.generateContent(context);
       const response = await result.response;
@@ -133,6 +170,44 @@ export default function DashboardHome() {
     }
   }, [staffAuth]);
 
+  const sanitizeHtml = (html) => {
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        'p', 'b', 'i', 'em', 'strong', 'u', 'br', 'ul', 'ol', 'li', 
+        'span', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'div',
+        'h1', 'h2', 'h3', 'h4', 'hr', 'code', 'pre'
+      ],
+      ALLOWED_STYLES: {
+        '*': {
+          'color': [/^#([a-f0-9]{3}|[a-f0-9]{6})$/i, /^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/, /^rgba\(\d{1,3}, \d{1,3}, \d{1,3}, ([0-1](\.\d+)?)\)$/],
+          'background-color': [/^#([a-f0-9]{3}|[a-f0-9]{6})$/i, /^rgb\(\d{1,3}, \d{1,3}, \d{1,3}\)$/],
+          'text-align': ['left', 'right', 'center', 'justify'],
+          'font-size': [/^\d+(?:px|em|rem|%)$/],
+          'font-weight': ['bold', 'normal', /^\d+$/],
+          'font-style': ['italic', 'normal'],
+          'text-decoration': ['underline', 'line-through', 'none'],
+          'margin': [/^[\d.]+(px|em|rem|%)(\s+[\d.]+(px|em|rem|%))*$/],
+          'padding': [/^[\d.]+(px|em|rem|%)(\s+[\d.]+(px|em|rem|%))*$/],
+          'border': [/^[\d.]+(px|em|rem)\s+\w+\s+([a-z]+|#[0-9a-f]{3,6})$/i],
+          'border-radius': [/^[\d.]+(px|em|rem|%)$/],
+          'width': [/^[\d.]+(px|em|rem|%)$/],
+          'height': [/^[\d.]+(px|em|rem|%)$/],
+          'display': ['block', 'inline-block', 'flex'],
+          'gap': [/^[\d.]+(px|em|rem|%)$/],
+          'flex-direction': ['row', 'column'],
+          'justify-content': ['flex-start', 'flex-end', 'center', 'space-between'],
+          'align-items': ['flex-start', 'flex-end', 'center']
+        }
+      },
+      ALLOWED_ATTRIBUTES: {
+        '*': ['style', 'class'],
+        'table': ['border', 'cellpadding', 'cellspacing'],
+        'td': ['colspan', 'rowspan', 'align'],
+        'th': ['colspan', 'rowspan', 'align']
+      }
+    });
+  };
+
   return (
     <div className="flex flex-col h-screen p-4 bg-neutral-900 text-neutral-100">
       
@@ -150,16 +225,23 @@ export default function DashboardHome() {
       
       <div className="flex-1 bg-neutral-800 rounded-lg shadow-lg p-4 mb-4 overflow-auto border border-neutral-700">
         <div className="space-y-4">
-          {messages.map((message, index) => (
+        {messages.map((message, index) => (
             <div 
               key={index} 
               className={`p-3 rounded-lg ${
                 message.role === 'user' 
                   ? 'bg-blue-900 ml-auto max-w-[80%] text-neutral-100' 
-                  : 'bg-neutral-700 mr-auto max-w-[80%] text-neutral-100'
+                  : 'bg-neutral-700 mr-auto max-w-[100%] text-neutral-100'
               }`}
             >
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              <div 
+                className="prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{
+                  __html: message.role === 'assistant' 
+                    ? sanitizeHtml(message.content)
+                    : message.content
+                }}
+              />
             </div>
           ))}
           {isLoading && (
