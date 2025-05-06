@@ -179,124 +179,130 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="border bg-neutral-800 p-6 rounded-lg shadow-lg w-full max-w-md text-white">
-        <div className="flex flex-col items-center text-center">
-          <h2 className="text-2xl font-bold mb-6">Complete Sale</h2>
+      <div className="border bg-neutral-800 p-6 rounded-lg shadow-lg w-full max-w-1/2 text-white">
+        <h2 className="text-2xl font-bold mb-6">Complete Sale</h2>
+        <div className="flex flex-row items-center justify-between mb-4 gap-4">          
+          <div className="flex flex-col items-center text-center w-1/2">          
+            
+            <div className="w-full bg-neutral-900 p-2 rounded-md mb-4 text-sm">
+              <p>Store: {user?.email}</p>
+              <p>Staff: {staffAuth?.staffName} ({staffAuth?.accountType})</p>
+            </div>
 
-          <div className="w-full bg-neutral-900 p-2 rounded-md mb-4 text-sm">
-            <p>Store: {user?.email}</p>
-            <p>Staff: {staffAuth?.staffName} ({staffAuth?.accountType})</p>
+            <div className="w-full bg-neutral-700 p-4 rounded-md mb-4 overflow-y-auto">
+              <h3 className="text-lg font-semibold mb-2 text-left">Your Order:</h3>
+              <ul className="text-sm text-left space-y-1">
+                {orderDetails.map(item => (
+                  <li key={item.id} className="flex justify-between">
+                    <span>{item.quantity} x {item.name} {item.size && `(${item.size})`}</span>
+                    <span>R{(parseFloat(String(item.price).replace('R', '') || 0) * item.quantity).toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {appliedSpecials.length > 0 && (
+                <>
+                  <hr className="my-2 border-neutral-600"/>
+                  <h4 className="text-sm font-semibold text-green-400">Applied Specials:</h4>
+                  <ul className="text-sm text-left space-y-1">
+                    {appliedSpecials.map((special, index) => (
+                      <li key={index} className="flex justify-between text-green-400">
+                        <span>{special.name}</span>
+                        <span>-R {special.savedAmount.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <hr className="my-2 border-neutral-600"/>
+              <div className="flex justify-between font-bold text-base">
+                <span>Total:</span>
+                <span>R{totalPrice}</span>
+              </div>
+            </div>
+
           </div>
+          <div className="flex flex-col items-center text-center w-1/2">
 
-          <div className="w-full bg-neutral-700 p-4 rounded-md mb-4 max-h-48 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-2 text-left">Your Order:</h3>
-            <ul className="text-sm text-left space-y-1">
-              {orderDetails.map(item => (
-                <li key={item.id} className="flex justify-between">
-                  <span>{item.quantity} x {item.name} {item.size && `(${item.size})`}</span>
-                  <span>R{(parseFloat(String(item.price).replace('R', '') || 0) * item.quantity).toFixed(2)}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="w-full mb-4">
+              <h3 className="text-lg font-semibold mb-2 text-left">Payment Method</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {paymentMethods.map((method) => (
+                  <button
+                    key={method.id}
+                    onClick={() => setPaymentMethod(method.id)}
+                    className={`p-3 rounded-md flex items-center justify-center gap-2 transition-colors
+                      ${paymentMethod === method.id 
+                        ? 'bg-indigo-600 hover:bg-indigo-700' 
+                        : 'bg-neutral-700 hover:bg-neutral-600'}`}
+                  >
+                    <span>{method.icon}</span>
+                    <span>{method.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            {appliedSpecials.length > 0 && (
-              <>
-                <hr className="my-2 border-neutral-600"/>
-                <h4 className="text-sm font-semibold text-green-400">Applied Specials:</h4>
-                <ul className="text-sm text-left space-y-1">
-                  {appliedSpecials.map((special, index) => (
-                    <li key={index} className="flex justify-between text-green-400">
-                      <span>{special.name}</span>
-                      <span>-R {special.savedAmount.toFixed(2)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
+            {paymentMethod === 'cash' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Cash Received</label>
+                <input
+                  type="number"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  className="w-full p-2 bg-neutral-700 rounded"
+                  placeholder="Enter amount"
+                  step="0.01"
+                  min={totalPrice}
+                />
+                {cashReceived && parseFloat(cashReceived) >= parseFloat(totalPrice) && (
+                  <div className="mt-2 text-green-400">
+                    Change: R {(parseFloat(cashReceived) - parseFloat(totalPrice)).toFixed(2)}
+                  </div>
+                )}
+              </div>
             )}
 
-            <hr className="my-2 border-neutral-600"/>
-            <div className="flex justify-between font-bold text-base">
-              <span>Total:</span>
-              <span>R{totalPrice}</span>
-            </div>
+            {paymentMethod === 'voucher' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Voucher Code</label>
+                <input
+                  type="text"
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                  className="w-full p-2 bg-neutral-700 rounded"
+                  placeholder="Enter voucher code"
+                  maxLength="8"
+                />
+              </div>
+            )}
+
+            {error && (
+              <div className="w-full bg-red-600/20 border border-red-500 text-red-100 p-3 rounded-md mb-4">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleConfirm}
+              disabled={!staffAuth || !user || !paymentMethod || processing}
+              className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 
+                focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 mb-4
+                disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {processing ? 'Processing...' : getPaymentButtonText()}
+            </button>
+            
+            <button
+              onClick={onClose}
+              className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 
+                focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            >
+              Cancel
+            </button>
+
           </div>
-
-          <div className="w-full mb-4">
-            <h3 className="text-lg font-semibold mb-2 text-left">Payment Method</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {paymentMethods.map((method) => (
-                <button
-                  key={method.id}
-                  onClick={() => setPaymentMethod(method.id)}
-                  className={`p-3 rounded-md flex items-center justify-center gap-2 transition-colors
-                    ${paymentMethod === method.id 
-                      ? 'bg-indigo-600 hover:bg-indigo-700' 
-                      : 'bg-neutral-700 hover:bg-neutral-600'}`}
-                >
-                  <span>{method.icon}</span>
-                  <span>{method.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {paymentMethod === 'cash' && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Cash Received</label>
-              <input
-                type="number"
-                value={cashReceived}
-                onChange={(e) => setCashReceived(e.target.value)}
-                className="w-full p-2 bg-neutral-700 rounded"
-                placeholder="Enter amount"
-                step="0.01"
-                min={totalPrice}
-              />
-              {cashReceived && parseFloat(cashReceived) >= parseFloat(totalPrice) && (
-                <div className="mt-2 text-green-400">
-                  Change: R {(parseFloat(cashReceived) - parseFloat(totalPrice)).toFixed(2)}
-                </div>
-              )}
-            </div>
-          )}
-
-          {paymentMethod === 'voucher' && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">Voucher Code</label>
-              <input
-                type="text"
-                value={voucherCode}
-                onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                className="w-full p-2 bg-neutral-700 rounded"
-                placeholder="Enter voucher code"
-                maxLength="8"
-              />
-            </div>
-          )}
-
-          {error && (
-            <div className="w-full bg-red-600/20 border border-red-500 text-red-100 p-3 rounded-md mb-4">
-              {error}
-            </div>
-          )}
-
-          <button
-            onClick={handleConfirm}
-            disabled={!staffAuth || !user || !paymentMethod || processing}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 
-              focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 mb-4
-              disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {processing ? 'Processing...' : getPaymentButtonText()}
-          </button>
-          
-          <button
-            onClick={onClose}
-            className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 
-              focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          >
-            Cancel
-          </button>
         </div>
       </div>
     </div>
