@@ -129,9 +129,9 @@ export default function RootLayout({ children }) {
             roles: ['manager']
         },
         { 
-            name: 'Exports', 
+            name: 'Reports', 
             icon: <AiOutlineDownload />, 
-            href: '/dashboard/exports',
+            href: '/dashboard/reports',
             roles: ['manager']
         },
         { 
