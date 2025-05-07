@@ -81,8 +81,17 @@ export default function DashboardHome() {
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       
       // Enhanced context with staff information
-      const context = `You are an AI assistant for the Chilzone coffee shop's dashboard POS system (called iBean). Located in South Africa Using Rand (R).
+      const context = `You are an AI assistant for the Chilzone coffee shop's dashboard POS system (called iBean). 
       You are currently helping ${staffAuth.staffName} who is a ${staffAuth.accountType}.
+
+      A bit more insight into the store:
+      Chillzone is a coffee shop inside a printing shops called iClick Business Centre.
+      iClick Business Centre is a printing shop that offers a wide range of printing services, including business cards, flyers, brochures, and more.
+      Chillzone is a coffee shop that offers a variety of beverages and snacks, including coffee, tea, pastries, and light meals.
+      Both is under the same management and are located in the same building.
+      It's based in South Africa, and uses the South African Rand (ZAR) as its currency.
+
+      Our Conversation so far: ${messages.map(msg => `<p><strong>${msg.role === 'user' ? 'User' : 'Assistant'}:</strong> ${msg.content}</p>`).join('')}
 
       ${staffAuth.accountType === 'manager' 
         ? 'As a manager, they have full access to all store data and management functions.'
@@ -97,6 +106,12 @@ export default function DashboardHome() {
       Refunds: ${JSON.stringify(storeData.refunds)}
 
       Current date: ${new Date().toLocaleDateString()}
+
+      Details for People:
+
+      1. Candice (Business Owner)
+      2. Christiaan (Manager at Zevenwaght Mall Branch) & (Developer of iBean POS System)
+      3. Nico (Manager at Westgate Mall Branch)
 
       Please provide rich, formatted responses using HTML and inline styles. You can use:
 
@@ -136,6 +151,34 @@ export default function DashboardHome() {
 
       Format data appropriately based on the context and make it visually appealing.
 
+      Additional Note: The App is still in development and may not have all features available yet. So help me out if I ask about something that is not available yet.
+      
+      Incomplete Features:
+      - Exports (Layout is there, Data still needs to be organized and inserted, as well as the download/export pdf button)
+      - Vouchers System (Voucher Details to be added to the database, and the voucher code generation system is still in development)
+        - Type of Voucher (Discount, Free Item, etc.)
+      - Main Sales Page (Still needs product sorting feauture)
+      - Categories Management (Needs Varieties input simplified)      
+      - Refunds Needs a input for the staff member & Item and payment method used for the refund.
+
+      Sometimes the user might ask how to go about doing certain things in the app. Please give a step by step guide on how to do it. Use lists and tables to format the information.
+
+      App layout:
+      Side Menu (On The Left - collapsable) - The Displayed Page (on the right)
+      1 Pages (
+      1.1 Homepage(You are here to assist staff)
+      1.2 Sales(Main Page of the Sales inputs (Order Summary on the right and products on the left))
+      1.3 Refunds
+      1.4 Products Management
+      1.5 Categories Management
+      1.6 Specials Management
+      1.7 Voucher Management
+      1.8 Staff Management
+      1.9 Exports Page
+      1.10 Store Account Page
+
+      PS: Remember to sometimes be fun & snarky..
+
       Question: ${userInput}`;
 
       const result = await model.generateContent(context);
@@ -169,6 +212,7 @@ export default function DashboardHome() {
       setMessages([greeting]);
     }
   }, [staffAuth]);
+
 
   const sanitizeHtml = (html) => {
     return DOMPurify.sanitize(html, {
@@ -221,6 +265,15 @@ export default function DashboardHome() {
             </span>
           </div>
         )}
+      </div>
+      <div className='flex justify-end'>
+        {/* Clear Chat */}
+        <button 
+          onClick={() => setMessages([])} 
+          className="px-4 py-2 bg-red-600 text-white rounded-lg mb-4 hover:bg-red-700 transition-colors duration-200"
+        >
+          Clear Chat
+        </button>
       </div>
       
       <div className="flex-1 bg-neutral-800 rounded-lg shadow-lg p-4 mb-4 overflow-auto border border-neutral-700">
