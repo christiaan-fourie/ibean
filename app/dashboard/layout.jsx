@@ -76,7 +76,7 @@ export default function RootLayout({ children }) {
     const [staffAuth, setStaffAuth] = useState(null);
     const [showStaffAuth, setShowStaffAuth] = useState(false);
     const [error, setError] = useState('');
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [selectedMenuItem, setSelectedMenuItem] = useState(null);
 
     const menuItems = [
@@ -96,7 +96,7 @@ export default function RootLayout({ children }) {
             name: 'Refunds', 
             icon: <AiOutlineRollback />, 
             href: '/dashboard/refunds',
-            roles: ['manager'] // Only managers can process refunds
+            roles: ['staff' ,'manager'] // Only managers can process refunds
         },
         { 
             name: 'Products', 
@@ -260,7 +260,7 @@ export default function RootLayout({ children }) {
                                 onClick={handleEndShift}
                                 className="mt-2 w-full bg-neutral-700 text-white px-3 py-1 rounded text-sm hover:bg-neutral-600 transition-colors"
                             >
-                                End Shift
+                                Switch User
                             </button>
                         </div>
                     </div>

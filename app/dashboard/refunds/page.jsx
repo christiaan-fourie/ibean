@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import db from '../../../utils/firebase';
-import RouteGuard from '../../components/RouteGuard';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../../../utils/firebase';
 
@@ -18,6 +17,7 @@ export default function Refunds() {
 
     const initialRefundState = {
         productName: '', // Will be 'item' in reports
+        originalStaff: '', // Placeholder for original staff name
         amount: '',
         reason: '',
         method: 'cash', // Default refund method (maps to 'method' in reports)
@@ -167,139 +167,140 @@ export default function Refunds() {
 
 
     return (
-        <RouteGuard requiredRoles={['manager', 'staff']} currentRole={staffAuth?.accountType}>
             <div className="min-h-screen bg-neutral-900 p-4 md:p-8">
-                <div className="max-w-2xl mx-auto"> {/* Adjusted max-width for a more focused form */}
-                    <h1 className="text-3xl font-bold text-white mb-8 text-center">Refund Management</h1>
+                <div className="flex gap-4 items-top"> {/* Adjusted max-width for a more focused form */}
+                    <div className='w-1/2'>
 
-                    {/* Add Refund Form */}
-                    <div className="mb-8 p-6 bg-neutral-800 rounded-lg shadow-md">
-                        <h2 className="text-xl font-semibold text-white mb-6">Process New Refund</h2>
-                        <form onSubmit={handleSubmitRefund} className="space-y-6">
-                            <div>
-                                <label htmlFor="productName" className="block text-sm font-medium text-neutral-300 mb-1">
-                                    Product Name / Item
-                                </label>
-                                <input
-                                    type="text"
-                                    name="productName"
-                                    id="productName"
-                                    value={newRefund.productName}
-                                    onChange={handleInputChange}
-                                    className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
-                                    required
-                                />
-                            </div>
-                            
-                            <div>
-                                <label htmlFor="amount" className="block text-sm font-medium text-neutral-300 mb-1">
-                                    Refund Amount (R)
-                                </label>
-                                <input
-                                    type="number"
-                                    name="amount"
-                                    id="amount"
-                                    value={newRefund.amount}
-                                    onChange={handleInputChange}
-                                    step="0.01"
-                                    min="0.01"
-                                    className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
-                                    required
-                                />
-                            </div>
+                        {/* Add Refund Form */}
+                        <div className="mb-8 p-6 bg-neutral-800 rounded-lg shadow-md">
+                            <h2 className="text-xl font-semibold text-white mb-6">Process New Refund</h2>
+                            <form onSubmit={handleSubmitRefund} className="space-y-6">
+                                <div>
+                                    <label htmlFor="productName" className="block text-sm font-medium text-neutral-300 mb-1">
+                                        Product Name / Item
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="productName"
+                                        id="productName"
+                                        value={newRefund.productName}
+                                        onChange={handleInputChange}
+                                        className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
+                                        required
+                                    />
+                                </div>
 
-                            <div>
-                                <label htmlFor="method" className="block text-sm font-medium text-neutral-300 mb-1">
-                                    Refund Method
-                                </label>
-                                <select
-                                    name="method"
-                                    id="method"
-                                    value={newRefund.method}
-                                    onChange={handleInputChange}
-                                    className="w-full p-2.5 bg-neutral-700 rounded text-white focus:ring-indigo-500 focus:border-indigo-500"
-                                    required
+                                
+                                <div>
+                                    <label htmlFor="amount" className="block text-sm font-medium text-neutral-300 mb-1">
+                                        Refund Amount (R)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        name="amount"
+                                        id="amount"
+                                        value={newRefund.amount}
+                                        onChange={handleInputChange}
+                                        step="0.01"
+                                        min="0.01"
+                                        className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="method" className="block text-sm font-medium text-neutral-300 mb-1">
+                                        Refund Method
+                                    </label>
+                                    <select
+                                        name="method"
+                                        id="method"
+                                        value={newRefund.method}
+                                        onChange={handleInputChange}
+                                        className="w-full p-2.5 bg-neutral-700 rounded text-white focus:ring-indigo-500 focus:border-indigo-500"
+                                        required
+                                    >
+                                        <option value="cash">Cash</option>
+                                        <option value="card">Card</option>
+                                        <option value="snapscan">SnapScan</option>
+                                        <option value="store_credit">Store Credit</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="reason" className="block text-sm font-medium text-neutral-300 mb-1">
+                                        Reason for Refund
+                                    </label>
+                                    <textarea
+                                        name="reason"
+                                        id="reason"
+                                        value={newRefund.reason}
+                                        onChange={handleInputChange}
+                                        className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
+                                        rows="3"
+                                        required
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={loading || !staffAuth} // Disable if loading or staffAuth not loaded
+                                    className="w-full p-2.5 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700 disabled:opacity-50 transition duration-150"
                                 >
-                                    <option value="cash">Cash</option>
-                                    <option value="card">Card</option>
-                                    <option value="snapscan">SnapScan</option>
-                                    <option value="store_credit">Store Credit</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label htmlFor="reason" className="block text-sm font-medium text-neutral-300 mb-1">
-                                    Reason for Refund
-                                </label>
-                                <textarea
-                                    name="reason"
-                                    id="reason"
-                                    value={newRefund.reason}
-                                    onChange={handleInputChange}
-                                    className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
-                                    rows="3"
-                                    required
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={loading || !staffAuth} // Disable if loading or staffAuth not loaded
-                                className="w-full p-2.5 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700 disabled:opacity-50 transition duration-150"
-                            >
-                                {loading ? 'Processing...' : 'Process Refund'}
-                            </button>
-                        </form>
+                                    {loading ? 'Processing...' : 'Process Refund'}
+                                </button>
+                            </form>
+                        </div>
                     </div>
+                    <div className='w-1/2'>
+                        {/* Refunds List */}
+                        <div className="">
+                                                
+                                                {pageLoading && !refunds.length ? (
+                                                    <p className="text-neutral-400 text-center py-4">Loading recent refunds...</p>
+                                                ) : refunds.length > 0 ? (
+                                                    <div className="space-y-4">
+                                                        {refunds.map(refund => (
+                                                            <div key={refund.id} className="p-4 bg-neutral-800 rounded-lg shadow">
+                                                                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
+                                                                    <div className="flex-grow">
+                                                                        <p className="text-lg font-medium text-white">{refund.productName}</p>
+                                                                        <p className="text-sm text-neutral-400">
+                                                                            Amount: R {typeof refund.amount === 'number' ? refund.amount.toFixed(2) : refund.amount}
+                                                                        </p>
+                                                                        <p className="text-sm text-neutral-400 capitalize"> 
+                                                                            Method: {refund.method?.replace('_', ' ') || 'N/A'}
+                                                                        </p>
+                                                                        <p className="mt-1 text-sm text-neutral-300">
+                                                                            Reason: {refund.reason}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="text-xs sm:text-sm text-neutral-500 sm:text-right flex-shrink-0 mt-2 sm:mt-0">
+                                                                        <p className="font-semibold text-indigo-400">
+                                                                            By: {refund.staffName || refund.createdBy?.name || 'Unknown Staff'}
+                                                                        </p>
+                                                                        <p>Store: {refund.storeId || 'N/A'}</p>
+                                                                        <p>{refund.date ? new Date(refund.date).toLocaleDateString() : 'No date'} {refund.date ? new Date(refund.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-neutral-400 text-center py-4">
+                                                        No refunds recorded yet.
+                                                    </p>
+                                                )}
+                        </div>
+                    </div>                
+
                     
-                    {/* Messages */}
-                    {error && <div className="my-4 p-3 bg-red-600/30 border border-red-500 rounded text-white text-sm">{error}</div>}
-                    {success && <div className="my-4 p-3 bg-green-600/30 border border-green-500 rounded text-white text-sm">{success}</div>}
-
-                    {/* Refunds List */}
-                    <div className="mt-10">
-                        <h2 className="text-xl font-semibold text-white mb-6">
-                            Recent Refunds
-                        </h2>
-                        {pageLoading && !refunds.length ? (
-                            <p className="text-neutral-400 text-center py-4">Loading recent refunds...</p>
-                        ) : refunds.length > 0 ? (
-                            <div className="space-y-4">
-                                {refunds.map(refund => (
-                                    <div key={refund.id} className="p-4 bg-neutral-800 rounded-lg shadow">
-                                        <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                                            <div className="flex-grow">
-                                                <p className="text-lg font-medium text-white">{refund.productName}</p>
-                                                <p className="text-sm text-neutral-400">
-                                                    Amount: R {typeof refund.amount === 'number' ? refund.amount.toFixed(2) : refund.amount}
-                                                </p>
-                                                <p className="text-sm text-neutral-400 capitalize"> 
-                                                    Method: {refund.method?.replace('_', ' ') || 'N/A'}
-                                                </p>
-                                                <p className="mt-1 text-sm text-neutral-300">
-                                                    Reason: {refund.reason}
-                                                </p>
-                                            </div>
-                                            <div className="text-xs sm:text-sm text-neutral-500 sm:text-right flex-shrink-0 mt-2 sm:mt-0">
-                                                <p className="font-semibold text-indigo-400">
-                                                    By: {refund.staffName || refund.createdBy?.name || 'Unknown Staff'}
-                                                </p>
-                                                <p>Store: {refund.storeId || 'N/A'}</p>
-                                                <p>{refund.date ? new Date(refund.date).toLocaleDateString() : 'No date'} {refund.date ? new Date(refund.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-neutral-400 text-center py-4">
-                                No refunds recorded yet.
-                            </p>
-                        )}
-                    </div>
                 </div>
+                    {/* Messages */}
+                    {error && <div className=" p-3 bg-red-600/30 border border-red-500 rounded text-white text-sm">{error}</div>}
+                    {success && <div className=" p-3 bg-green-600/30 border border-green-500 rounded text-white text-sm">{success}</div>}
+
             </div>
-        </RouteGuard>
     );
 }

@@ -6,6 +6,8 @@ import db from '../../../utils/firebase'; // Assuming db is your Firestore insta
 import { auth } from '../../../utils/firebase'; // Assuming auth is your Firebase Auth instance
 import { useAuthState } from 'react-firebase-hooks/auth';
 import RouteGuard from '../../components/RouteGuard'; // Your existing RouteGuard
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Helper to get the start of a day from a YYYY-MM-DD string
 const getStartOfDayFromString = (dateString) => {
@@ -22,7 +24,8 @@ const getEndOfDayFromString = (dateString) => {
 };
 
 
-export default function Exports() {
+
+export default function Reports() {
     const [user, loadingAuth, errorAuth] = useAuthState(auth);
     const [staffAuth, setStaffAuth] = useState(null);
 
@@ -149,7 +152,7 @@ export default function Exports() {
                 return false; // Skip if no valid date
             }
             
-            const storeMatch = selectedStore === 'All stores' || sale.storeEmail === selectedStore;
+            const storeMatch = selectedStore === 'All stores' || sale.storeId === selectedStore;
             const dateMatch = saleDate >= startDate && saleDate <= endDate;
             return storeMatch && dateMatch;
         });
@@ -212,7 +215,7 @@ export default function Exports() {
     const calculateRefundTotals = useCallback((refundData) => {
         return refundData.map(refund => ({
             staffName: refund.staffName || 'Unknown',
-            item: refund.item || 'Unknown Item',
+            item: refund.productName || 'Unknown Item',
             method: refund.method || 'Unknown Method',
             reason: refund.reason || 'No reason provided',
             amount: parseFloat(refund.amount) || 0,
@@ -332,6 +335,72 @@ export default function Exports() {
     if (loadingAuth && !user) { // Only show auth loading if user isn't already available
         return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
     }
+
+    // Function to handle PDF export
+    const handleExportToPdf = async () => {
+        setLoading(true); // Provide feedback to the user
+        setError('');
+
+        // Get the element to capture. You might need to add an `id` to the main content area.
+        // For example, the div with className="p-4 md:p-6 bg-neutral-800 rounded-lg shadow-lg"
+        // Let's assume you add id="report-content" to that div.
+        const reportElement = document.getElementById('report-content');
+
+        if (!reportElement) {
+            setError("Could not find the report content to export.");
+            setLoading(false);
+        }
+
+        try {
+            // html2canvas options - these can be tweaked for better results
+            const canvas = await html2canvas(reportElement, {
+                scale: 2, // Increase scale for better resolution, but larger file size
+                useCORS: true, // If you have images from other domains
+                backgroundColor: '#1f2937', // bg-neutral-800, match your main background
+                onclone: (document) => {
+                    // This function is called when html2canvas clones the document
+                    // It's a good place to make sure styles are applied correctly
+                    // For Tailwind, styles are generally inline or via classes, so it should work.
+                    // However, for complex scenarios, you might need to embed styles or ensure
+                    // that the cloned document has access to all necessary CSS.
+
+                    // Example: if you had external stylesheets not picked up, you might link them here.
+                    // For Tailwind, this is usually not an issue if it's processed and included in your main CSS.
+                }
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+
+            // Calculate PDF dimensions
+            // Standard A4 dimensions in points (72 DPI): 595.28 x 841.89
+            // You might want to adjust this based on your content's aspect ratio
+            const pdfWidth = 210; // A4 width in mm
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width; // Maintain aspect ratio
+
+            const pdf = new jsPDF({
+                orientation: pdfWidth > pdfHeight ? 'l' : 'p', // landscape or portrait
+                unit: 'mm',
+                format: [pdfWidth, pdfHeight] // or 'a4' and then fit the image
+            });
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+            // Get current date for filename
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+            const storeName = stores.find(s => s.id === selectedStore)?.name || selectedStore;
+            const safeStoreName = storeName.replace(/[^a-zA-Z0-9]/g, '_'); // Sanitize store name for filename
+
+            pdf.save(`Chillzone_Report_${safeStoreName}_${dateStr}.pdf`);
+
+        } catch (err) {
+            console.error("Error generating PDF:", err);
+            setError("Failed to generate PDF. " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     
     return (
         <RouteGuard requiredRoles={['manager']} currentRole={staffAuth?.accountType}>
@@ -358,20 +427,29 @@ export default function Exports() {
                                 <label htmlFor="endDate" className="block text-sm font-medium text-neutral-300 mb-1">End Date</label>
                                 <input id="endDate" type="date" value={dateRange.end} onChange={(e) => handleDateChange(e, 'end')} className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500" />
                             </div>
+                            <div className="">
+                                    <button
+                                        onClick={handleExportToPdf}
+                                        className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+                                        disabled={loading} // Disable if data is still loading
+                                    >
+                                        {loading ? 'Generating...' : 'Export to PDF - Not Working Yet'}
+                                    </button>
+                            </div>
                         </div>
                         {error && (<div className="mt-4 p-3 bg-red-600/30 border border-red-500 rounded text-white text-sm">{error}</div>)}
                         {loading && (<div className="mt-4 p-3 bg-blue-600/30 border border-blue-500 rounded text-white text-sm">Loading and processing data... Please wait.</div>)}
                     </div>
                     
                     {!loading && !error && (
-                        <div className="p-4 md:p-6 bg-neutral-800 rounded-lg shadow-lg">
+                        <div  id="report-content" className="p-4 md:p-6 bg-neutral-800 rounded-lg shadow-lg">
                             <h2 className="text-xl font-bold text-white mb-4">
                                 Analysis Report: <span className='rounded-lg bg-neutral-900 p-2 text-green-500'>{stores.find(s => s.id === selectedStore)?.name || selectedStore}</span>
                                 <span className="text-sm text-neutral-400 block md:inline md:ml-2">
                                     ({new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()}) {/* Ensure date is parsed correctly for display */}
-                                </span>
-                            </h2>
-                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 text-neutral-300">
+                                </span>                                
+                            </h2>                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 text-neutral-300">
                                 <div className="bg-neutral-700 p-4 rounded-lg"><strong>Total Transactions:</strong> {calculatedStats.totalTransactions}</div>
                                 <div className="bg-neutral-700 p-4 rounded-lg"><strong>Total Sales Value:</strong> R{calculatedStats.totalSalesValue.toFixed(2)}</div>
                                 <div className="bg-neutral-700 p-4 rounded-lg"><strong>Total Refunds Value:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
