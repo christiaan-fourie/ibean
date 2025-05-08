@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc, Timestamp, increment, arrayUnion, getDoc } from 'firebase/firestore';
 import { auth } from '../../utils/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
@@ -11,15 +11,27 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const [staffAuth, setStaffAuth] = useState(null);
     const [error, setError] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('');
+    const [secondaryPaymentMethod, setSecondaryPaymentMethod] = useState('');
     const [cashReceived, setCashReceived] = useState('');
     const [voucherCode, setVoucherCode] = useState('');
     const [processing, setProcessing] = useState(false);
+    const [validatedVoucher, setValidatedVoucher] = useState(null);
+    const [calculatedTotal, setCalculatedTotal] = useState(totalPrice);
+    const [remainingAmount, setRemainingAmount] = useState(0);
+    const [showSecondaryPayment, setShowSecondaryPayment] = useState(false);
+    const [voucherDiscountedItems, setVoucherDiscountedItems] = useState([]);
 
     const paymentMethods = [
         { id: 'card', name: 'Card', icon: '💳' },
         { id: 'cash', name: 'Cash', icon: '💵' },
         { id: 'snapscan', name: 'SnapScan', icon: '📱' },
         { id: 'voucher', name: 'Voucher', icon: '🎫' }
+    ];
+
+    const secondaryPaymentMethods = [
+        { id: 'card', name: 'Card', icon: '💳' },
+        { id: 'cash', name: 'Cash', icon: '💵' },
+        { id: 'snapscan', name: 'SnapScan', icon: '📱' }
     ];
 
     useEffect(() => {
@@ -34,6 +46,16 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         }
     }, []);
 
+    // Reset calculated total when totalPrice changes
+    useEffect(() => {
+        setCalculatedTotal(totalPrice);
+        setValidatedVoucher(null);
+        setRemainingAmount(0);
+        setShowSecondaryPayment(false);
+        setSecondaryPaymentMethod('');
+        setVoucherDiscountedItems([]);
+    }, [totalPrice]);
+
     if (!orderDetails || orderDetails.length === 0) {
         return null;
     }
@@ -43,33 +65,262 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         if (!db) {
             throw new Error('Firestore database is not initialized.');
         }
+        
+        if (!code || code.trim() === '') {
+            throw new Error('Please enter a valid voucher code.');
+        }
+        
         const vouchersRef = collection(db, 'vouchers');
-        // Vouchers should be active and not past their expirationDate (if expirationDate is a Timestamp)
-        // If expirationDate is an ISO string, new Date() should be compared against new Date(doc.expirationDate)
-        // For this example, assuming expirationDate is a Firestore Timestamp
+        
+        // Query for active vouchers with the provided code
+        // Note: Removed the redeemed=false condition to support reusable vouchers
         const q = query(vouchersRef,
-            where('code', '==', code),
+            where('code', '==', code.trim()),
             where('active', '==', true)
-            // where('expirationDate', '>', Timestamp.now()) // More robust way to check expiry with Firestore Timestamps
         );
+        
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            throw new Error('Invalid or already used voucher code.');
+            throw new Error('Invalid, expired, or deactivated voucher code.');
         }
         
         const voucherDoc = snapshot.docs[0];
-        const voucherData = voucherDoc.data();
+        const voucherData = { id: voucherDoc.id, ...voucherDoc.data() };
 
+        // Check if the voucher has been marked as redeemed (happens only for one-time use vouchers)
+        if (voucherData.redeemed) {
+            throw new Error('This voucher has already been redeemed and cannot be used again.');
+        }
+        
         // Client-side check for expiration if stored as string or if further validation is needed
         if (voucherData.expirationDate) {
-            const expiryDate = voucherData.expirationDate.toDate ? voucherData.expirationDate.toDate() : new Date(voucherData.expirationDate);
+            const expiryDate = voucherData.expirationDate.toDate ? 
+                voucherData.expirationDate.toDate() : 
+                new Date(voucherData.expirationDate);
+                
             if (expiryDate < new Date()) {
-                throw new Error('Voucher code has expired.');
+                throw new Error('This voucher expired on ' + expiryDate.toLocaleDateString() + '.');
             }
         }
         
-        return voucherDoc; // Return the document itself (id + data)
+        // Check for minimum purchase requirements
+        if (voucherData.minimumPurchase && parseFloat(totalPrice) < parseFloat(voucherData.minimumPurchase)) {
+            throw new Error(`This voucher requires a minimum purchase of R${parseFloat(voucherData.minimumPurchase).toFixed(2)}.`);
+        }
+        
+        // Check for item-specific vouchers
+        if (voucherData.applicableItems && voucherData.applicableItems.length > 0) {
+            const orderItemIds = orderDetails.map(item => item.id);
+            const hasMatchingItem = voucherData.applicableItems.some(itemId => 
+                orderItemIds.includes(itemId)
+            );
+            
+            if (!hasMatchingItem) {
+                throw new Error('This voucher can only be applied to specific items not in your cart.');
+            }
+        }
+        
+        // Check for usage limits
+        if (voucherData.maxRedemptions && voucherData.redemptionCount >= voucherData.maxRedemptions) {
+            throw new Error('This voucher has reached its maximum number of uses.');
+        }
+        
+        // Check for store-specific vouchers
+        if (voucherData.restrictedToStores && voucherData.restrictedToStores.length > 0) {
+            const currentStoreId = staffAuth?.storeId || user?.email;
+            if (!voucherData.restrictedToStores.includes(currentStoreId)) {
+                throw new Error('This voucher cannot be used at this location.');
+            }
+        }
+        
+        return voucherData;
+    };
+
+    // Apply voucher discount to total
+    const applyVoucher = async () => {
+        setError('');
+        
+        if (!voucherCode) {
+            setError('Please enter a voucher code.');
+            return;
+        }
+
+        try {
+            const voucherData = await validateVoucher(voucherCode);
+            setValidatedVoucher(voucherData);
+            
+            let newTotal = parseFloat(totalPrice);
+            let voucherDiscount = 0;
+            let discountedItems = [];
+            
+            // Calculate discount based on voucher type
+            if (voucherData.voucherType === 'discount') {
+                if (voucherData.discountType === 'percentage') {
+                    // Apply percentage discount
+                    voucherDiscount = (newTotal * voucherData.discountValue) / 100;
+                    newTotal = Math.max(0, newTotal - voucherDiscount);
+                    
+                    // Track discounted items if specified
+                    if (voucherData.applicableItems && voucherData.applicableItems.length > 0) {
+                        orderDetails.forEach(item => {
+                            if (voucherData.applicableItems.includes(item.id)) {
+                                const itemDiscount = parseFloat(item.price) * voucherData.discountValue / 100;
+                                discountedItems.push({
+                                    id: item.id,
+                                    name: item.name,
+                                    discount: itemDiscount
+                                });
+                            }
+                        });
+                    }
+                } else if (voucherData.discountType === 'fixed') {
+                    // Apply fixed amount discount
+                    voucherDiscount = Math.min(newTotal, voucherData.discountValue);
+                    newTotal = Math.max(0, newTotal - voucherDiscount);
+                    
+                    // For fixed discounts, track as a general discount
+                    discountedItems.push({
+                        id: 'fixed-discount',
+                        name: 'Fixed Discount',
+                        discount: voucherDiscount
+                    });
+                }
+                
+                setCalculatedTotal(newTotal.toFixed(2));
+                
+                // If voucher doesn't cover the full amount, enable secondary payment
+                if (newTotal > 0) {
+                    setRemainingAmount(newTotal);
+                    setShowSecondaryPayment(true);
+                } else {
+                    setRemainingAmount(0);
+                    setShowSecondaryPayment(false);
+                }
+            } else if (voucherData.voucherType === 'freeItem') {
+                // For free item vouchers, identify the free item and calculate discount
+                const freeItemId = typeof voucherData.freeItem === 'object' ? 
+                    voucherData.freeItem.id : voucherData.freeItem;
+                
+                // Find the item in the order
+                const freeItemInOrder = orderDetails.find(item => item.id === freeItemId);
+                
+                if (freeItemInOrder) {
+                    // If the free item is in the order, apply the discount
+                    const itemPrice = parseFloat(String(freeItemInOrder.price).replace(/[^\d.-]/g, '')) || 0;
+                    voucherDiscount = itemPrice;
+                    newTotal = Math.max(0, newTotal - voucherDiscount);
+                    discountedItems.push({
+                        id: freeItemInOrder.id,
+                        name: freeItemInOrder.name,
+                        discount: voucherDiscount
+                    });
+                }
+                
+                setCalculatedTotal(newTotal.toFixed(2));
+                setRemainingAmount(newTotal);
+                setShowSecondaryPayment(true);
+            } else if (voucherData.voucherType === 'buyXGetY') {
+                // Buy X Get Y free implementation
+                const triggerItemId = voucherData.triggerItem;
+                const freeItemId = voucherData.freeItem;
+                
+                // Check if both items are in the order
+                const triggerItem = orderDetails.find(item => item.id === triggerItemId);
+                const freeItem = orderDetails.find(item => item.id === freeItemId);
+                
+                if (triggerItem && freeItem) {
+                    // Apply discount to the free item
+                    const freeItemPrice = parseFloat(String(freeItem.price).replace(/[^\d.-]/g, '')) || 0;
+                    voucherDiscount = freeItemPrice;
+                    newTotal = Math.max(0, newTotal - voucherDiscount);
+                    discountedItems.push({
+                        id: freeItem.id,
+                        name: freeItem.name,
+                        discount: voucherDiscount
+                    });
+                }
+                
+                setCalculatedTotal(newTotal.toFixed(2));
+                setRemainingAmount(newTotal);
+                setShowSecondaryPayment(true);
+            }
+            
+            // Store discounted items for reference
+            setVoucherDiscountedItems(discountedItems);
+        } catch (error) {
+            setError(error.message);
+            setValidatedVoucher(null);
+            setCalculatedTotal(totalPrice);
+            setRemainingAmount(0);
+            setShowSecondaryPayment(false);
+            setVoucherDiscountedItems([]);
+        }
+    };
+    
+    // Clear the applied voucher
+    const clearVoucher = () => {
+        setVoucherCode('');
+        setValidatedVoucher(null);
+        setCalculatedTotal(totalPrice);
+        setRemainingAmount(0);
+        setShowSecondaryPayment(false);
+        setVoucherDiscountedItems([]);
+    };
+
+    // Mark voucher as redeemed in database
+    const markVoucherAsRedeemed = async (voucherId) => {
+        if (!voucherId) return;
+        
+        try {
+            const voucherRef = doc(db, 'vouchers', voucherId);
+            
+            // Get the current voucher data to check if it has been redeemed before
+            const voucherDoc = await getDoc(voucherRef);
+            if (!voucherDoc.exists()) {
+                console.error('Voucher document not found');
+                return;
+            }
+            
+            const voucherData = voucherDoc.data();
+            const currentRedemptionCount = voucherData.redemptionCount || 0;
+            
+            // Base update data - increment redemption count and add redemption details
+            const updateData = {
+                redemptionCount: increment(1),
+                lastRedeemedAt: serverTimestamp(),
+                lastRedeemedBy: {
+                    staffId: staffAuth?.staffId,
+                    staffName: staffAuth?.staffName,
+                    role: staffAuth?.accountType,
+                    storeId: staffAuth?.storeId || user?.email
+                },
+                // Store redemption history as an array
+                redemptionHistory: arrayUnion({
+                    timestamp: new Date().toISOString(),
+                    staffId: staffAuth?.staffId,
+                    staffName: staffAuth?.staffName,
+                    storeId: staffAuth?.storeId || user?.email
+                })
+            };
+            
+            // If voucher should expire after redemption OR it has reached max redemptions,
+            // mark it as redeemed and inactive
+            if (validatedVoucher?.expireAfterRedemption) {
+                updateData.redeemed = true;
+                updateData.active = false;
+            } else if (validatedVoucher?.maxRedemptions && 
+                      (currentRedemptionCount + 1) >= validatedVoucher.maxRedemptions) {
+                // If it has reached max redemptions, mark as inactive but not necessarily redeemed
+                updateData.active = false;
+            }
+            
+            await updateDoc(voucherRef, updateData);
+            
+        } catch (error) {
+            console.error('Error marking voucher as redeemed:', error);
+            // We continue with the order process even if updating the voucher fails
+        }
     };
 
     const handleConfirm = async () => {
@@ -89,6 +340,35 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         }
         if (!paymentMethod) {
             setError('Please select a payment method.');
+            return;
+        }
+
+        // Validate voucher payment
+        if (paymentMethod === 'voucher' && !validatedVoucher) {
+            setError('Please enter and validate a voucher code.');
+            return;
+        }
+
+        // If voucher doesn't cover full amount, validate secondary payment
+        if (paymentMethod === 'voucher' && showSecondaryPayment) {
+            if (!secondaryPaymentMethod) {
+                setError('Please select a secondary payment method for the remaining amount.');
+                return;
+            }
+            
+            // Validate cash received for secondary payment
+            if (secondaryPaymentMethod === 'cash' && (
+                !cashReceived || 
+                parseFloat(cashReceived) < parseFloat(remainingAmount)
+            )) {
+                setError('Cash received must be greater than or equal to the remaining amount.');
+                return;
+            }
+        } else if (paymentMethod === 'cash' && (
+            !cashReceived || 
+            parseFloat(cashReceived) < parseFloat(calculatedTotal)
+        )) {
+            setError('Cash received must be greater than or equal to the total amount.');
             return;
         }
 
@@ -150,12 +430,10 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     sum + ((parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0) * (parseInt(item.quantity) || 0)), 0).toFixed(2)),
                 totalDiscount: parseFloat(appliedSpecials ?
                     appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0).toFixed(2) : "0.00"),
-                total: numericTotalPrice, // ALIGNED: This is the sale.total for reports
+                total: parseFloat(calculatedTotal), // ALIGNED: This is the sale.total for reports
                 payment: {
                     method: paymentMethod,
-                    cashReceived: paymentMethod === 'cash' ? parseFloat(cashReceived) : null,
-                    change: paymentMethod === 'cash' ? parseFloat((parseFloat(cashReceived) - numericTotalPrice).toFixed(2)) : null,
-                    processedAt: serverTimestamp() // Use serverTimestamp for consistency
+                    // Extra payment details will be added conditionally below
                 },
                 paymentStatus: 'completed',
                 orderNumber: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, // Shortened random part
@@ -168,26 +446,43 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     setProcessing(false);
                     return;
                 }
-                const voucherDocRef = await validateVoucher(voucherCode); // Returns doc ref
+                
+                // We already have the validated voucher data, no need to fetch it again
+                // Just use validatedVoucher instead of calling validateVoucher again
+                if (!validatedVoucher) {
+                    setError('Please validate the voucher code first.');
+                    setProcessing(false);
+                    return;
+                }
+                
                 saleDataPayload.voucher = {
                     code: voucherCode,
-                    id: voucherDocRef.id,
-                    value: parseFloat(voucherDocRef.data().value) || numericTotalPrice // Assuming voucher covers full amount if not specified
+                    id: validatedVoucher.id,
+                    voucherType: validatedVoucher.voucherType,
+                    discountType: validatedVoucher.discountType,
+                    discountValue: validatedVoucher.discountValue,
+                    value: parseFloat(totalPrice) - parseFloat(calculatedTotal) // The actual discount value applied
                 };
-                // Mark voucher as used
-                await updateDoc(doc(db, 'vouchers', voucherDocRef.id), {
-                    active: false,
-                    usedAt: serverTimestamp(),
-                    usedBy: {
-                        staffId: staffAuth.staffId,
-                        staffName: staffAuth.staffName,
-                        storeId: determinedStoreId
-                    },
-                    saleId: null // Will be updated after sale is recorded if needed, or store orderNumber
-                });
+                
+                // Mark voucher as used - we'll use our dedicated function for this
+                await markVoucherAsRedeemed(validatedVoucher.id);
+                
                 // If voucher has a specific value, it might adjust the total or act as full payment
                 // For simplicity here, assuming voucher covers the total price if used.
                 // Your specific voucher logic might differ (e.g. partial payment).
+            }
+
+            if (paymentMethod === 'voucher' && showSecondaryPayment) {
+                saleDataPayload.payment.secondaryPayment = {
+                    method: secondaryPaymentMethod,
+                    amount: parseFloat(remainingAmount)
+                };
+                
+                if (secondaryPaymentMethod === 'cash') {
+                    saleDataPayload.payment.secondaryPayment.cashReceived = parseFloat(cashReceived);
+                    saleDataPayload.payment.secondaryPayment.change = 
+                        parseFloat(cashReceived) - parseFloat(remainingAmount);
+                }
             }
 
             const salesCollectionRef = collection(db, 'sales');
@@ -225,8 +520,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         }
     };
     
-    const numericTotalPriceForDisplay = parseFloat(String(totalPrice).replace(/[^\d.-]/g, '')) || 0;
-
+    const numericTotalPriceForDisplay = parseFloat(String(calculatedTotal).replace(/[^\d.-]/g, '')) || 0;
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -270,6 +564,27 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                                         </li>
                                     ))}
                                 </ul>
+                            </>
+                        )}
+
+                        {validatedVoucher && validatedVoucher.voucherType === 'discount' && (
+                            <>
+                                <hr className="my-2 border-neutral-600" />
+                                <div className="flex justify-between text-green-400 font-medium">
+                                    <span>Voucher: {validatedVoucher.name}</span>
+                                    <span>-R {(parseFloat(totalPrice) - parseFloat(calculatedTotal)).toFixed(2)}</span>
+                                </div>
+                            </>
+                        )}
+
+                        {validatedVoucher && validatedVoucher.voucherType === 'freeItem' && (
+                            <>
+                                <hr className="my-2 border-neutral-600" />
+                                <div className="text-green-400 font-medium">
+                                    <span>Free Item: {typeof validatedVoucher.freeItem === 'object' 
+                                        ? validatedVoucher.freeItem.name 
+                                        : validatedVoucher.freeItem}</span>
+                                </div>
                             </>
                         )}
 
@@ -324,23 +639,170 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
 
                         {paymentMethod === 'voucher' && (
                             <div className="p-3 bg-neutral-700/50 rounded-md border border-neutral-600">
-                                <label htmlFor="voucherCode" className="block text-sm font-medium mb-1">Voucher Code:</label>
-                                <input
-                                    type="text"
-                                    id="voucherCode"
-                                    value={voucherCode}
-                                    onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                                    className="w-full p-2 bg-neutral-600 rounded text-white placeholder-neutral-400"
-                                    placeholder="Enter 8-digit code"
-                                    maxLength="8" // Common voucher length
-                                />
+                                <div className="flex items-center gap-2 mb-3">
+                                    <label htmlFor="voucherCode" className="block text-sm font-medium">Voucher Code:</label>
+                                    <input
+                                        type="text"
+                                        id="voucherCode"
+                                        value={voucherCode}
+                                        onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                                        className="flex-1 w-full p-2 bg-neutral-600 rounded text-white placeholder-neutral-400"
+                                        placeholder="Enter voucher code"
+                                        maxLength="8"
+                                        disabled={validatedVoucher !== null}
+                                    />
+                                    {!validatedVoucher ? (
+                                        <button 
+                                            onClick={applyVoucher}
+                                            disabled={!voucherCode || voucherCode.length < 4}
+                                            className="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium
+                                            hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Validate
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={clearVoucher}
+                                            className="px-3 py-2 bg-red-600 text-white rounded-md text-sm font-medium
+                                            hover:bg-red-700"
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {validatedVoucher && (
+                                    <div className="bg-neutral-800 p-3 rounded-md border border-neutral-700 mb-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="font-medium text-green-400">{validatedVoucher.name}</span>
+                                            <span className="text-xs text-neutral-400">
+                                                {validatedVoucher.expirationDate ? 
+                                                    `Expires: ${new Date(validatedVoucher.expirationDate.seconds * 1000).toLocaleDateString()}` : 
+                                                    'No expiration'}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="text-sm">
+                                            {validatedVoucher.voucherType === 'discount' && validatedVoucher.discountType === 'percentage' && (
+                                                <span className="text-green-400 font-medium">{validatedVoucher.discountValue}% discount applied</span>
+                                            )}
+                                            {validatedVoucher.voucherType === 'discount' && validatedVoucher.discountType === 'fixed' && (
+                                                <span className="text-green-400 font-medium">R{validatedVoucher.discountValue.toFixed(2)} discount applied</span>
+                                            )}
+                                            {validatedVoucher.voucherType === 'freeItem' && (
+                                                <span className="text-green-400 font-medium">
+                                                    Free item: {typeof validatedVoucher.freeItem === 'object' ? 
+                                                        validatedVoucher.freeItem.name : 
+                                                        validatedVoucher.freeItem}
+                                                </span>
+                                            )}
+                                            {validatedVoucher.voucherType === 'buyXGetY' && (
+                                                <span className="text-green-400 font-medium">
+                                                    Buy one, get one free deal applied
+                                                </span>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-center mt-2 text-sm">
+                                            <span className="text-white">Discount amount:</span>
+                                            <span className="text-green-400 font-medium">-R {(parseFloat(totalPrice) - parseFloat(calculatedTotal)).toFixed(2)}</span>
+                                        </div>
+
+                                        {/* Display voucher usage info */}
+                                        {validatedVoucher.redemptionCount > 0 && (
+                                            <div className="mt-2 pt-2 border-t border-neutral-700 text-xs text-neutral-400">
+                                                <span>Used {validatedVoucher.redemptionCount} {validatedVoucher.redemptionCount === 1 ? 'time' : 'times'} previously</span>
+                                                {validatedVoucher.maxRedemptions && (
+                                                    <span className="ml-1">
+                                                        ({validatedVoucher.maxRedemptions - validatedVoucher.redemptionCount} uses remaining)
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {validatedVoucher.expireAfterRedemption && (
+                                            <div className="mt-1 text-xs text-yellow-400">
+                                                ⚠️ This voucher will expire after use
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {voucherDiscountedItems && voucherDiscountedItems.length > 0 && (
+                                    <div className="mb-3 p-2 bg-neutral-800 rounded-md border border-neutral-700 text-sm">
+                                        <div className="text-green-400 font-medium mb-1">Discounted items:</div>
+                                        <ul className="list-disc pl-5 text-xs space-y-1">
+                                            {voucherDiscountedItems.map((item, index) => (
+                                                <li key={index} className="text-neutral-300">
+                                                    {item.name}: <span className="text-green-400">-R{item.discount.toFixed(2)}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                
+                                {showSecondaryPayment && (
+                                    <div className="mt-4 pt-4 border-t border-neutral-600">
+                                        <h4 className="text-sm font-medium text-white mb-2">
+                                            Pay Remaining Amount (R{remainingAmount.toFixed(2)})
+                                        </h4>
+                                        <div className="grid grid-cols-3 gap-2 mb-3">
+                                            {secondaryPaymentMethods.map(method => (
+                                                <button
+                                                    key={method.id}
+                                                    onClick={() => {
+                                                        setSecondaryPaymentMethod(method.id);
+                                                        setError('');
+                                                    }}
+                                                    className={`p-2 rounded-md flex items-center justify-center gap-1 text-sm
+                                                    ${secondaryPaymentMethod === method.id
+                                                        ? 'bg-indigo-600 text-white'
+                                                        : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
+                                                    }`}
+                                                >
+                                                    <span>{method.icon}</span>
+                                                    <span>{method.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        
+                                        {secondaryPaymentMethod === 'cash' && (
+                                            <div className="p-2 bg-neutral-800 rounded">
+                                                <label htmlFor="cashReceived" className="block text-xs font-medium mb-1">
+                                                    Cash Received:
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    id="cashReceived"
+                                                    value={cashReceived}
+                                                    onChange={(e) => setCashReceived(e.target.value)}
+                                                    className="w-full p-2 bg-neutral-600 rounded text-white placeholder-neutral-400 text-sm"
+                                                    placeholder="Enter amount received"
+                                                    step="0.01"
+                                                    min={remainingAmount.toFixed(2)}
+                                                />
+                                                {cashReceived && parseFloat(cashReceived) >= remainingAmount && (
+                                                    <div className="mt-1 text-xs text-green-400">
+                                                        Change Due: R {(parseFloat(cashReceived) - remainingAmount).toFixed(2)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                         
                         <div className="pt-2 space-y-3">
                              <button
                                 onClick={handleConfirm}
-                                disabled={!staffAuth || !user || !paymentMethod || processing || loadingUser}
+                                disabled={!staffAuth || !user || !paymentMethod || processing || loadingUser || 
+                                    (paymentMethod === 'voucher' && !validatedVoucher) ||
+                                    (paymentMethod === 'voucher' && showSecondaryPayment && !secondaryPaymentMethod) ||
+                                    (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < numericTotalPriceForDisplay)) ||
+                                    (paymentMethod === 'voucher' && showSecondaryPayment && secondaryPaymentMethod === 'cash' && 
+                                        (!cashReceived || parseFloat(cashReceived) < remainingAmount))
+                                }
                                 className="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-green-700 
                                 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-800
                                 disabled:opacity-60 disabled:cursor-not-allowed transition duration-150"

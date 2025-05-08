@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, Timestamp } from 'firebase/firestore'; // Timestamp might still be needed for date conversion from Firestore
-import db from '../../../utils/firebase'; // Assuming db is your Firestore instance
-import { auth } from '../../../utils/firebase'; // Assuming auth is your Firebase Auth instance
+import { collection, getDocs } from 'firebase/firestore'; 
+import db from '../../../utils/firebase'; 
+import { auth } from '../../../utils/firebase'; 
 import { useAuthState } from 'react-firebase-hooks/auth';
-import RouteGuard from '../../components/RouteGuard'; // Your existing RouteGuard
+import RouteGuard from '../../components/RouteGuard';
 
 import { pdf, Page, Text, View, Document, StyleSheet } from '@react-pdf/renderer'
 
@@ -15,7 +15,6 @@ const getStartOfDayFromString = (dateString) => {
     date.setUTCHours(0, 0, 0, 0); // Use UTC to avoid timezone shifts from string
     return date;
 };
-
 // Helper to get the end of a day from a YYYY-MM-DD string
 const getEndOfDayFromString = (dateString) => {
     const date = new Date(dateString);
@@ -63,6 +62,14 @@ export default function Reports() {
         peakHour: 'N/A', bestDay: 'N/A', topPaymentMethod: 'N/A',
         refundRate: '0.0', avgItemsPerSale: '0.0', revenuePerHour: 0,
         totalSalesValue: 0, totalRefundsValue: 0, totalTransactions: 0,
+    });
+
+    const [voucherStats, setVoucherStats] = useState({
+        totalVouchersRedeemed: 0,
+        totalVoucherValue: 0,
+        voucherUsageByType: {},
+        mostPopularVoucherType: 'N/A',
+        percentSalesWithVouchers: 0,
     });
 
     const [selectedStore, setSelectedStore] = useState('All stores');
@@ -258,7 +265,107 @@ export default function Reports() {
             };
         });
     }, []);
-    
+
+    const calculateVoucherStats = useCallback((salesData, vouchersData) => {
+        // Filter vouchers based on the same date range and store used for sales
+        const startDate = getStartOfDayFromString(dateRange.start);
+        const endDate = getEndOfDayFromString(dateRange.end);
+        
+        // First, get sales with vouchers
+        const salesWithVouchers = salesData.filter(sale => 
+            sale.payment?.method === 'voucher' || sale.voucher
+        );
+        
+        // Find redeemed vouchers in the date range
+        const redeemedVouchers = vouchersData.filter(voucher => {
+            if (!voucher.redeemed) return false;
+            
+            let redemptionDate;
+            if (voucher.redeemedAt && voucher.redeemedAt.toDate) {
+                redemptionDate = voucher.redeemedAt.toDate();
+            } else if (typeof voucher.redeemedAt === 'string') {
+                redemptionDate = new Date(voucher.redeemedAt);
+            } else if (voucher.usedAt && voucher.usedAt.toDate) {
+                redemptionDate = voucher.usedAt.toDate();
+            } else if (typeof voucher.usedAt === 'string') {
+                redemptionDate = new Date(voucher.usedAt);
+            } else {
+                return false;
+            }
+            
+            const storeMatch = selectedStore === 'All stores' || 
+                               voucher.redeemedBy?.storeId === selectedStore || 
+                               voucher.usedBy?.storeId === selectedStore;
+                               
+            const dateMatch = redemptionDate >= startDate && redemptionDate <= endDate;
+            return storeMatch && dateMatch;
+        });
+        
+        // Calculate voucher usage by type
+        const voucherTypes = {};
+        let totalVoucherValue = 0;
+        
+        redeemedVouchers.forEach(voucher => {
+            const voucherType = voucher.voucherType || 'unknown';
+            if (!voucherTypes[voucherType]) {
+                voucherTypes[voucherType] = { count: 0, value: 0 };
+            }
+            voucherTypes[voucherType].count += 1;
+            
+            // Calculate value based on voucher type
+            let voucherValue = 0;
+            if (voucher.voucherType === 'discount') {
+                if (voucher.discountType === 'percentage') {
+                    // For percentage discounts, we need to estimate from sales data if possible
+                    const matchingSale = salesWithVouchers.find(sale => 
+                        sale.voucher?.id === voucher.id ||
+                        sale.voucher?.code === voucher.code
+                    );
+                    if (matchingSale) {
+                        voucherValue = matchingSale.voucher?.value || 0;
+                    }
+                } else if (voucher.discountType === 'fixed') {
+                    voucherValue = parseFloat(voucher.discountValue) || 0;
+                }
+            } else if (voucher.voucherType === 'freeItem') {
+                // For free item vouchers, try to get product value
+                const matchingSale = salesWithVouchers.find(sale => 
+                    sale.voucher?.id === voucher.id ||
+                    sale.voucher?.code === voucher.code
+                );
+                if (matchingSale && matchingSale.voucher?.value) {
+                    voucherValue = parseFloat(matchingSale.voucher.value) || 0;
+                }
+            }
+            
+            voucherTypes[voucherType].value += voucherValue;
+            totalVoucherValue += voucherValue;
+        });
+        
+        // Find most popular voucher type
+        let mostPopularType = 'N/A';
+        let maxCount = 0;
+        for (const type in voucherTypes) {
+            if (voucherTypes[type].count > maxCount) {
+                mostPopularType = type;
+                maxCount = voucherTypes[type].count;
+            }
+        }
+        
+        // Calculate percentage of sales using vouchers
+        const percentWithVouchers = salesData.length > 0
+            ? (salesWithVouchers.length / salesData.length * 100).toFixed(1)
+            : 0;
+        
+        return {
+            totalVouchersRedeemed: redeemedVouchers.length,
+            totalVoucherValue,
+            voucherUsageByType: voucherTypes,
+            mostPopularVoucherType: mostPopularType,
+            percentSalesWithVouchers: percentWithVouchers,
+        };
+    }, [dateRange, selectedStore]);
+
     const calculateAdditionalStats = useCallback((salesData, refundData) => {
         if (!salesData || salesData.length === 0) {
             return {
@@ -320,84 +427,179 @@ export default function Reports() {
             setRefundTotals(calculateRefundTotals(filteredData.refunds));
             setStaffTotals(calculateStaffTotals(filteredData.sales));
             setCalculatedStats(calculateAdditionalStats(filteredData.sales, filteredData.refunds));
+            setVoucherStats(calculateVoucherStats(filteredData.sales, masterData.vouchers));
         } else {
             setSalesTotals({}); setRefundTotals([]); setStaffTotals([]);
             setCalculatedStats({ /* initial empty stats */ });
+            setVoucherStats({ /* initial empty voucher stats */ });
         }
         setLoading(false); // All data fetching, filtering, and calculations are done
-    }, [filteredData, calculateProductPaymentTotals, calculateRefundTotals, calculateStaffTotals, calculateAdditionalStats]);
+    }, [filteredData, calculateProductPaymentTotals, calculateRefundTotals, calculateStaffTotals, calculateAdditionalStats, calculateVoucherStats, masterData.vouchers]);
 
 
     const handleStoreChange = (e) => setSelectedStore(e.target.value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
     
-    // Modern PDF Styles
+    // Enhanced PDF Styles
     const styles = StyleSheet.create({
-        page: { padding: 40, fontFamily: 'Helvetica' },
-    
-        // Titles
+        // Page and Document Styles
+        page: { 
+            padding: 40, 
+            fontFamily: 'Helvetica',
+            backgroundColor: '#FFFFFF' 
+        },
+        headerContainer: {
+            flexDirection: 'row',
+            marginBottom: 20,
+            paddingBottom: 15,
+            borderBottom: '2 solid #6B46C1'
+        },
+        headerLogo: {
+            width: 60,
+            height: 60,
+            marginRight: 15
+        },
+        headerTextContainer: {
+            flex: 1,
+            justifyContent: 'center'
+        },
+        reportDateRange: {
+            fontSize: 11,
+            color: '#4B5563',
+            marginTop: 4
+        },
+        
+        // Titles and Headings
         title: {
-        fontSize: 20,
-        marginBottom: 15,
-        fontWeight: 'bold',
-        color: '#111'
+            fontSize: 22,
+            marginBottom: 6,
+            fontWeight: 'bold',
+            color: '#6B46C1' // Purple to match iBEAN brand
         },
-        title2: {
-        fontSize: 13,
-        marginTop: 20,
-        marginBottom: 8,
-        fontWeight: 'semibold',
-        color: '#555'
+        subtitle: {
+            fontSize: 12,
+            color: '#4B5563',
+            marginBottom: 15
         },
-    
+        sectionHeader: {
+            backgroundColor: '#F3F4F6',
+            paddingVertical: 8,
+            paddingHorizontal: 10,
+            marginTop: 25,
+            marginBottom: 10,
+            borderRadius: 4,
+            borderLeft: '4 solid #6B46C1',
+            fontSize: 14,
+            fontWeight: 'bold',
+            color: '#1F2937'
+        },
+        
         // General text
         description: {
-        fontSize: 10,
-        color: '#444',
-        marginBottom: 4
+            fontSize: 10,
+            color: '#4B5563',
+            marginBottom: 8,
+            lineHeight: 1.4
         },
-    
+        
         // Table styles
         table: {
-        display: 'table',
-        width: 'auto',
-        marginBottom: 10
+            display: 'table',
+            width: 'auto',
+            marginBottom: 15,
+            borderRadius: 4,
+            borderWidth: 1,
+            borderColor: '#E5E7EB',
+            borderStyle: 'solid'
         },
         tableRow: {
-        flexDirection: 'row',
-        borderBottom: '0.5 solid #ccc',
-        alignItems: 'center',
-        minHeight: 20
+            flexDirection: 'row',
+            borderBottomWidth: 1,
+            borderBottomColor: '#E5E7EB',
+            borderBottomStyle: 'solid',
+            alignItems: 'center',
+            minHeight: 24
+        },
+        tableRowAlternate: {
+            flexDirection: 'row',
+            borderBottomWidth: 1,
+            borderBottomColor: '#E5E7EB',
+            borderBottomStyle: 'solid',
+            alignItems: 'center',
+            minHeight: 24,
+            backgroundColor: '#F9FAFB'
         },
         tableCellHeader: {
-        flex: 1,
-        backgroundColor: '#f3f4f6',
-        fontSize: 10,
-        fontWeight: 'bold',
-        padding: 6,
-        borderRight: '0.5 solid #ccc',
-        color: '#222'
+            flex: 1,
+            backgroundColor: '#6B46C1',
+            fontSize: 10,
+            fontWeight: 'bold',
+            padding: 8,
+            color: '#FFFFFF',
+            borderRightWidth: 1,
+            borderRightColor: '#9F7AEA',
+            borderRightStyle: 'solid'
         },
         tableCell: {
-        flex: 1,
-        fontSize: 9,
-        padding: 5,
-        borderRight: '0.5 solid #eee',
-        color: '#333'
+            flex: 1,
+            fontSize: 9,
+            padding: 6,
+            color: '#4B5563',
+            borderRightWidth: 1,
+            borderRightColor: '#E5E7EB',
+            borderRightStyle: 'solid'
         },
-    
-        // List block
+        highlightCell: {
+            flex: 1,
+            fontSize: 9,
+            padding: 6,
+            color: '#6B46C1',
+            fontWeight: 'bold',
+            borderRightWidth: 1,
+            borderRightColor: '#E5E7EB',
+            borderRightStyle: 'solid'
+        },
+        
+        // List and stat blocks
+        statsContainer: {
+            marginTop: 10,
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            justifyContent: 'space-between'
+        },
         statItem: {
-        marginBottom: 6
+            width: '48%',
+            marginBottom: 10,
+            backgroundColor: '#F9FAFB',
+            borderRadius: 4,
+            padding: 8,
+            borderLeftWidth: 3,
+            borderLeftColor: '#6B46C1',
+            borderLeftStyle: 'solid'
         },
         statLabel: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#333'
+            fontSize: 9,
+            fontWeight: 'bold',
+            color: '#4B5563',
+            marginBottom: 2
         },
         statValue: {
-        fontSize: 10,
-        color: '#555'
+            fontSize: 11,
+            color: '#111827',
+            fontWeight: 'bold'
+        },
+        
+        // Footer
+        footer: {
+            position: 'absolute',
+            bottom: 30,
+            left: 40,
+            right: 40,
+            textAlign: 'center',
+            fontSize: 8,
+            color: '#9CA3AF',
+            borderTop: '1 solid #E5E7EB',
+            paddingTop: 10
         }
     });
       
@@ -406,100 +608,124 @@ export default function Reports() {
         const doc = (
             <Document>
                 <Page size="A4" style={styles.page}>
-
-                    {/* Header */}
-                    <Text style={styles.title}>
-                    Analysis Report: {selectedStore} from {dateRange.start} to {dateRange.end}
-                    </Text>
+                    {/* Professional Header with Logo */}
+                    <View style={styles.headerContainer}>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.title}>iBEAN Sales Analysis</Text>
+                            <Text style={styles.subtitle}>{selectedStore}</Text>
+                            <Text style={styles.reportDateRange}>Report Period: {dateRange.start} to {dateRange.end}</Text>
+                        </View>
+                    </View>
 
                     {/* Sales Report Table */}
-                    <Text style={styles.title2}>Sales Report</Text>
+                    <Text style={styles.sectionHeader}>Sales Report</Text>
                     <View style={styles.table}>
-                    <View style={styles.tableRow}>
-                        <Text style={styles.tableCellHeader}>Item</Text>
-                        <Text style={styles.tableCellHeader}>Cash</Text>
-                        <Text style={styles.tableCellHeader}>Card</Text>
-                        <Text style={styles.tableCellHeader}>SnapScan</Text>
-                        <Text style={styles.tableCellHeader}>Other</Text>
-                        <Text style={styles.tableCellHeader}>Total</Text>
-                    </View>
-                    {Object.values(salesTotals).sort((a, b) => b.Total - a.Total).map((sale, index) => (
-                        <View key={index} style={styles.tableRow}>
-                        <Text style={styles.tableCell}>{sale.Product}</Text>
-                        <Text style={styles.tableCell}>R {sale.Cash.toFixed(2)}</Text>
-                        <Text style={styles.tableCell}>R {sale.Card.toFixed(2)}</Text>
-                        <Text style={styles.tableCell}>R {sale.Snapscan.toFixed(2)}</Text>
-                        <Text style={styles.tableCell}>R {sale.Other.toFixed(2)}</Text>
-                        <Text style={styles.tableCell}>R {sale.Total.toFixed(2)}</Text>
+                        <View style={styles.tableRow}>
+                            <Text style={styles.tableCellHeader}>Item</Text>
+                            <Text style={styles.tableCellHeader}>Cash</Text>
+                            <Text style={styles.tableCellHeader}>Card</Text>
+                            <Text style={styles.tableCellHeader}>SnapScan</Text>
+                            <Text style={styles.tableCellHeader}>Other</Text>
+                            <Text style={styles.tableCellHeader}>Total</Text>
                         </View>
-                    ))}
+                        {Object.values(salesTotals).sort((a, b) => b.Total - a.Total).map((sale, index) => (
+                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
+                                <Text style={styles.tableCell}>{sale.Product}</Text>
+                                <Text style={styles.tableCell}>R {sale.Cash.toFixed(2)}</Text>
+                                <Text style={styles.tableCell}>R {sale.Card.toFixed(2)}</Text>
+                                <Text style={styles.tableCell}>R {sale.Snapscan.toFixed(2)}</Text>
+                                <Text style={styles.tableCell}>R {sale.Other.toFixed(2)}</Text>
+                                <Text style={styles.highlightCell}>R {sale.Total.toFixed(2)}</Text>
+                            </View>
+                        ))}
                     </View>
 
                     {/* Refunds Table */}
-                    <Text style={styles.title2}>Refunds Issued</Text>
+                    <Text style={styles.sectionHeader}>Refunds Issued</Text>
                     <View style={styles.table}>
-                    <View style={styles.tableRow}>
-                        <Text style={styles.tableCellHeader}>Crew Member</Text>
-                        <Text style={styles.tableCellHeader}>Item</Text>
-                        <Text style={styles.tableCellHeader}>Method</Text>
-                        <Text style={styles.tableCellHeader}>Reason</Text>
-                        <Text style={styles.tableCellHeader}>Amount</Text>
-                    </View>
-                    {refundTotals.map((refund, index) => (
-                        <View key={index} style={styles.tableRow}>
-                        <Text style={styles.tableCell}>{refund.staffName}</Text>
-                        <Text style={styles.tableCell}>{refund.item}</Text>
-                        <Text style={styles.tableCell}>{refund.method}</Text>
-                        <Text style={styles.tableCell}>{refund.reason}</Text>
-                        <Text style={styles.tableCell}>R {refund.amount.toFixed(2)}</Text>
+                        <View style={styles.tableRow}>
+                            <Text style={styles.tableCellHeader}>Crew Member</Text>
+                            <Text style={styles.tableCellHeader}>Item</Text>
+                            <Text style={styles.tableCellHeader}>Method</Text>
+                            <Text style={styles.tableCellHeader}>Reason</Text>
+                            <Text style={styles.tableCellHeader}>Amount</Text>
                         </View>
-                    ))}
+                        {refundTotals.map((refund, index) => (
+                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
+                                <Text style={styles.tableCell}>{refund.staffName}</Text>
+                                <Text style={styles.tableCell}>{refund.item}</Text>
+                                <Text style={styles.tableCell}>{refund.method}</Text>
+                                <Text style={styles.tableCell}>{refund.reason}</Text>
+                                <Text style={styles.highlightCell}>R {refund.amount.toFixed(2)}</Text>
+                            </View>
+                        ))}
                     </View>
 
                     {/* Crew Table */}
-                    <Text style={styles.title2}>Crew Performance</Text>
+                    <Text style={styles.sectionHeader}>Crew Performance</Text>
                     <View style={styles.table}>
-                    <View style={styles.tableRow}>
-                        <Text style={styles.tableCellHeader}>Crew Member</Text>
-                        <Text style={styles.tableCellHeader}>Transactions</Text>
-                        <Text style={styles.tableCellHeader}>Avg Sale</Text>
-                        <Text style={styles.tableCellHeader}>Total Sales</Text>
-                        <Text style={styles.tableCellHeader}>Most Sold Product</Text>
-                    </View>
-                    {staffTotals.sort((a, b) => b.total - a.total).map((staff, index) => (
-                        <View key={index} style={styles.tableRow}>
-                        <Text style={styles.tableCell}>{staff.staffName}</Text>
-                        <Text style={styles.tableCell}>{staff.transactions}</Text>
-                        <Text style={styles.tableCell}>R {staff.averageSale.toFixed(2)}</Text>
-                        <Text style={styles.tableCell}>R {staff.total.toFixed(2)}</Text>
-                        <Text style={styles.tableCell}>{staff.mostPopularProduct}</Text>
+                        <View style={styles.tableRow}>
+                            <Text style={styles.tableCellHeader}>Crew Member</Text>
+                            <Text style={styles.tableCellHeader}>Transactions</Text>
+                            <Text style={styles.tableCellHeader}>Avg Sale</Text>
+                            <Text style={styles.tableCellHeader}>Total Sales</Text>
+                            <Text style={styles.tableCellHeader}>Most Sold Product</Text>
                         </View>
-                    ))}
+                        {staffTotals.sort((a, b) => b.total - a.total).map((staff, index) => (
+                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
+                                <Text style={styles.tableCell}>{staff.staffName}</Text>
+                                <Text style={styles.tableCell}>{staff.transactions}</Text>
+                                <Text style={styles.tableCell}>R {staff.averageSale.toFixed(2)}</Text>
+                                <Text style={styles.highlightCell}>R {staff.total.toFixed(2)}</Text>
+                                <Text style={styles.tableCell}>{staff.mostPopularProduct}</Text>
+                            </View>
+                        ))}
                     </View>
 
-                    {/* Stats List */}
-                    <Text style={styles.title2}>Summary Statistics</Text>
-                    <View>
-                    {[
-                        { label: "Peak Hour", value: calculatedStats.peakHour },
-                        { label: "Busiest Day (Value)", value: calculatedStats.bestDay },
-                        { label: "Most Used Payment", value: calculatedStats.topPaymentMethod },
-                        { label: "Refund Rate", value: `${calculatedStats.refundRate}%` },
-                        { label: "Avg Items/Sale", value: calculatedStats.avgItemsPerSale },
-                        { label: "Revenue/Active Hour", value: `R${calculatedStats.revenuePerHour.toFixed(2)}` }
-                    ].map((stat, index) => (
-                        <View key={index} style={styles.statItem}>
-                        <Text>
-                            <Text style={styles.statLabel}>{stat.label}: </Text>
-                            <Text style={styles.statValue}>{stat.value}</Text>
-                        </Text>
+                    {/* Voucher Table */}
+                    <Text style={styles.sectionHeader}>Voucher Statistics</Text>
+                    <Text style={styles.description}>Summary of voucher usage including discount percentages, fixed amount discounts, and free items</Text>
+                    <View style={styles.table}>
+                        <View style={styles.tableRow}>
+                            <Text style={styles.tableCellHeader}>Voucher Type</Text>
+                            <Text style={styles.tableCellHeader}>Count</Text>
+                            <Text style={styles.tableCellHeader}>Value</Text>
                         </View>
-                    ))}
+                        {Object.keys(voucherStats.voucherUsageByType).map((voucherType, index) => (
+                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
+                                <Text style={styles.tableCell}>{voucherType}</Text>
+                                <Text style={styles.tableCell}>{voucherStats.voucherUsageByType[voucherType].count}</Text>
+                                <Text style={styles.highlightCell}>R {voucherStats.voucherUsageByType[voucherType].value.toFixed(2)}</Text>
+                            </View>
+                        ))}
                     </View>
 
+                    {/* Stats List in Grid Layout */}
+                    <Text style={styles.sectionHeader}>Summary Statistics</Text>
+                    <View style={styles.statsContainer}>
+                        {[
+                            { label: "Peak Hour", value: calculatedStats.peakHour },
+                            { label: "Busiest Day (Value)", value: calculatedStats.bestDay },
+                            { label: "Most Used Payment", value: calculatedStats.topPaymentMethod },
+                            { label: "Refund Rate", value: `${calculatedStats.refundRate}%` },
+                            { label: "Avg Items/Sale", value: calculatedStats.avgItemsPerSale },
+                            { label: "Revenue/Active Hour", value: `R${calculatedStats.revenuePerHour.toFixed(2)}` },
+                            { label: "Total Vouchers Redeemed", value: voucherStats.totalVouchersRedeemed },
+                            { label: "Total Voucher Value", value: `R${voucherStats.totalVoucherValue.toFixed(2)}` },
+                            { label: "Most Popular Voucher Type", value: voucherStats.mostPopularVoucherType },
+                            { label: "Percent Sales with Vouchers", value: `${voucherStats.percentSalesWithVouchers}%` },
+                        ].map((stat, index) => (
+                            <View key={index} style={styles.statItem}>
+                                <Text style={styles.statLabel}>{stat.label}</Text>
+                                <Text style={styles.statValue}>{stat.value}</Text>
+                            </View>
+                        ))}
+                    </View>
+                    
+                    {/* Footer */}
+                    <Text style={styles.footer}>Generated by iBEAN Management System • {new Date().toLocaleDateString()} • Confidential</Text>
                 </Page>
             </Document>
-
         );
 
         const blob = await pdf(doc).toBlob();
@@ -634,6 +860,25 @@ export default function Reports() {
                                 ) : (<p className="text-neutral-400 p-3">No staff performance data for this period/store.</p>)}
                             </div>
 
+                            {/* Voucher Table */}
+                            <div className="mt-8">
+                                <h3 className='rounded-t-lg bg-neutral-900 p-3 text-lg font-semibold text-yellow-400'>Voucher Statistics</h3>
+                                {Object.keys(voucherStats.voucherUsageByType).length > 0 ? (
+                                    <div className="overflow-x-auto"><table className="min-w-full bg-neutral-800 border border-neutral-700 text-yellow-400">
+                                        <thead><tr className="bg-neutral-700">
+                                            <th className="px-4 py-2 text-left text-sm">Voucher Type</th><th className="px-4 py-2 text-left text-sm">Count</th>
+                                            <th className="px-4 py-2 text-left text-sm">Value</th>
+                                        </tr></thead>
+                                        <tbody>{Object.keys(voucherStats.voucherUsageByType).map((voucherType, index) => (
+                                            <tr key={index} className="border-b border-neutral-700 hover:bg-neutral-700/50">
+                                                <td className="px-4 py-2 text-neutral-300 text-sm">{voucherType}</td>
+                                                <td className="px-4 py-2 text-neutral-300 text-sm">{voucherStats.voucherUsageByType[voucherType].count}</td>
+                                                <td className="px-4 py-2 text-neutral-300 text-sm">R {voucherStats.voucherUsageByType[voucherType].value.toFixed(2)}</td>
+                                            </tr>))}</tbody>
+                                    </table></div>
+                                ) : (<p className="text-neutral-400 p-3">No voucher usage data for this period/store.</p>)}
+                            </div>
+
                             {/* Additional Stats */}
                             <div className="mt-8">
                                 <h3 className='rounded-t-lg bg-neutral-900 p-3 text-lg font-semibold text-purple-400'>Additional Statistics</h3>
@@ -643,6 +888,10 @@ export default function Reports() {
                                         { label: "Peak Hour", value: calculatedStats.peakHour }, { label: "Busiest Day (Value)", value: calculatedStats.bestDay },
                                         { label: "Most Used Payment", value: calculatedStats.topPaymentMethod }, { label: "Refund Rate", value: `${calculatedStats.refundRate}%` },
                                         { label: "Avg Items/Sale", value: calculatedStats.avgItemsPerSale }, { label: "Revenue/Active Hour", value: `R${calculatedStats.revenuePerHour.toFixed(2)}` },
+                                        { label: "Total Vouchers Redeemed", value: voucherStats.totalVouchersRedeemed },
+                                        { label: "Total Voucher Value", value: `R${voucherStats.totalVoucherValue.toFixed(2)}` },
+                                        { label: "Most Popular Voucher Type", value: voucherStats.mostPopularVoucherType },
+                                        { label: "Percent Sales with Vouchers", value: `${voucherStats.percentSalesWithVouchers}%` },
                                     ].map(stat => (<li key={stat.label} className="bg-neutral-700 p-3 rounded-md text-sm">
                                         <span className="font-semibold text-neutral-300">{stat.label}:</span> <span className="text-purple-300">{stat.value}</span>
                                     </li>))}</ul>
@@ -650,7 +899,7 @@ export default function Reports() {
                             </div>
                         </div>
                     )}
-                    {!loading && !error && filteredData.sales.length === 0 && filteredData.refunds.length === 0 && (
+                    {!loading && !error && masterData.sales.length === 0 && masterData.refunds.length === 0 && (
                          <div className="mt-6 p-4 bg-yellow-600/20 border border-yellow-500 rounded text-white text-center">
                             No sales or refund data available for the selected criteria after filtering.
                         </div>

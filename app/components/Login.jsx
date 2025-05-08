@@ -110,10 +110,8 @@ const Login = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
-      <div className="w-full max-w-md p-8 space-y-6 bg-neutral-800 rounded-lg shadow-md">
-        <div className='flex items-center justify-left'>
-          <div className="flex justify-center">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
+      <div className="pb-8">
             <Image
               src="/logo.png" // Path relative to the public directory
               alt="Your Company Logo"
@@ -122,7 +120,10 @@ const Login = () => {
               priority // Prioritize loading the logo
             />
           </div>
-          <h2 className="text-2xl font-bold text-center">Login</h2>
+      <div className="w-full max-w-md p-8 space-y-6 bg-neutral-800 rounded-lg shadow-md">
+        
+        <div className='flex items-center justify-around'>
+          <h2 className="text-2xl font-bold font-thin text-center bg-neutral-900 py-3 px-8 rounded-full text-neutral-100"> Store Login</h2>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-6">

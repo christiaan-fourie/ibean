@@ -113,6 +113,7 @@ export default function OrderCheckout() {
       const processedSpecialIds = new Set();
       const mutuallyExclusiveGroups = new Map();
       const usedSpecials = new Set(); // Track used specials per order
+      let hasAppliedMutuallyExclusiveSpecial = false; // New flag to track if ANY mutually exclusive special is applied
 
       // Validate and sort specials by priority
       const validSpecials = specials
@@ -167,20 +168,16 @@ export default function OrderCheckout() {
           // Skip if we've already used this special in this order
           if (usedSpecials.has(special.id)) return;
 
-          // For mutually exclusive specials, check if we've already applied a special
-          // that conflicts with this one
-          if (special.mutuallyExclusive) {
-            const triggerKey = special.triggerType === 'product' 
-              ? `${special.triggerProduct}_${special.triggerProductSize}`
-              : `category_${special.triggerCategory}_${special.triggerCategorySize}`;
-            
-            const rewardKey = special.rewardType === 'product' 
-              ? `${special.rewardProduct}_${special.rewardProductSize}`
-              : `category_${special.rewardCategory}_${special.rewardCategorySize}`;
-            
-            if (mutuallyExclusiveGroups.has(triggerKey) || mutuallyExclusiveGroups.has(rewardKey)) {
-              return;
-            }
+          // For mutually exclusive specials, check if we've already applied any special
+          // If this special is mutually exclusive, check if we've already applied any other special
+          if (special.mutuallyExclusive && newAppliedSpecials.length > 0) {
+            // Don't add this mutually exclusive special if other specials are already applied
+            return;
+          }
+          
+          // If any mutually exclusive special is already applied, don't apply additional specials
+          if (hasAppliedMutuallyExclusiveSpecial) {
+            return;
           }
 
           // Find trigger items
@@ -307,6 +304,9 @@ export default function OrderCheckout() {
                 
                 mutuallyExclusiveGroups.set(triggerKey, true);
                 mutuallyExclusiveGroups.set(rewardKey, true);
+                
+                // Set flag that we have applied a mutually exclusive special
+                hasAppliedMutuallyExclusiveSpecial = true;
               }
             }
           }

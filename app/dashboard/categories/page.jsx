@@ -164,7 +164,7 @@ export default function Categories() {
             <h1 className="text-3xl font-bold mb-6">Categories Management</h1>
 
             {/* Form Section */}
-            <form onSubmit={handleSubmit} className="mb-8 p-4 bg-neutral-800 rounded-lg">
+            <form className="mb-8 p-4 bg-neutral-800 rounded-lg">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <input
                         type="text"
@@ -186,18 +186,34 @@ export default function Categories() {
                 </div>
                 <div className="mb-4">
                     <label className="block text-sm font-medium text-neutral-300 mb-2">
-                        Varieties (one per line)
+                        Varieties (comma separated)
                     </label>
-                    <textarea
-                        name="varieties"
-                        value={Array.isArray(newCategory.varieties) ? newCategory.varieties.join('\n') : ''}
-                        onChange={(e) => setNewCategory(prev => ({
-                            ...prev,
-                            varieties: e.target.value.split('\n').filter(v => v.trim())
-                        }))}
-                        placeholder="Enter varieties (e.g., Solo, Short, Tall)"
-                        className="w-full p-2 bg-neutral-700 rounded min-h-[100px]"
-                    />
+                    <div className="mb-4">
+                        <input
+                            type="text"
+                            name="varieties"
+                            value={Array.isArray(newCategory.varieties) ? newCategory.varieties.join(',') : ''}
+                            onChange={(e) => {
+                                const varieties = e.target.value
+                                    .split(',')
+                                    .map(v => v.trim())
+                                    .map(v => v.toLowerCase());
+                                setNewCategory(prev => ({
+                                    ...prev,
+                                    varieties: [...new Set(varieties)]
+                                }));
+                            }}
+                            placeholder="Enter varieties (e.g., Solo,Short,Tall)"
+                            className="w-full p-3 bg-neutral-800 rounded-lg border border border-neutral-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200"
+                            aria-label="Product varieties input"
+                        />
+                        <div className="flex items-center justify-between text-xs text-neutral-400 mt-1">
+                            <span>Comma separated</span>
+                            <span>
+                                {Array.isArray(newCategory.varieties) ? newCategory.varieties.length : 0} varieties
+                            </span>
+                        </div>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2 mb-4">
                     <input
@@ -214,7 +230,7 @@ export default function Categories() {
                     <label htmlFor="active" className="text-neutral-200">Active</label>
                 </div>
                 <button
-                    type="submit"
+                    onClick={handleSubmit}
                     className="w-full p-2 bg-indigo-600 hover:bg-indigo-700 rounded transition-colors"
                 >
                     {editingId ? 'Update Category' : 'Add Category'}
