@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@react-pdf/renderer": "^4.3.0",
     "firebase": "^11.6.0",
     "html2canvas": "^1.4.1",
     "isomorphic-dompurify": "^2.24.0",

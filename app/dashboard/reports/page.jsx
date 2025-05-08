@@ -6,8 +6,8 @@ import db from '../../../utils/firebase'; // Assuming db is your Firestore insta
 import { auth } from '../../../utils/firebase'; // Assuming auth is your Firebase Auth instance
 import { useAuthState } from 'react-firebase-hooks/auth';
 import RouteGuard from '../../components/RouteGuard'; // Your existing RouteGuard
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+
+import { pdf, Page, Text, View, Document, StyleSheet } from '@react-pdf/renderer'
 
 // Helper to get the start of a day from a YYYY-MM-DD string
 const getStartOfDayFromString = (dateString) => {
@@ -47,8 +47,8 @@ export default function Reports() {
     });
 
     const [dateRange, setDateRange] = useState({
-        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-        end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
+        start: new Date().toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0],
     });
 
     const [stores] = useState([
@@ -331,82 +331,194 @@ export default function Reports() {
     const handleStoreChange = (e) => setSelectedStore(e.target.value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
     
-
-    if (loadingAuth && !user) { // Only show auth loading if user isn't already available
-        return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
-    }
-
-    // Function to handle PDF export
+    // Modern PDF Styles
+    const styles = StyleSheet.create({
+        page: { padding: 40, fontFamily: 'Helvetica' },
+    
+        // Titles
+        title: {
+        fontSize: 20,
+        marginBottom: 15,
+        fontWeight: 'bold',
+        color: '#111'
+        },
+        title2: {
+        fontSize: 13,
+        marginTop: 20,
+        marginBottom: 8,
+        fontWeight: 'semibold',
+        color: '#555'
+        },
+    
+        // General text
+        description: {
+        fontSize: 10,
+        color: '#444',
+        marginBottom: 4
+        },
+    
+        // Table styles
+        table: {
+        display: 'table',
+        width: 'auto',
+        marginBottom: 10
+        },
+        tableRow: {
+        flexDirection: 'row',
+        borderBottom: '0.5 solid #ccc',
+        alignItems: 'center',
+        minHeight: 20
+        },
+        tableCellHeader: {
+        flex: 1,
+        backgroundColor: '#f3f4f6',
+        fontSize: 10,
+        fontWeight: 'bold',
+        padding: 6,
+        borderRight: '0.5 solid #ccc',
+        color: '#222'
+        },
+        tableCell: {
+        flex: 1,
+        fontSize: 9,
+        padding: 5,
+        borderRight: '0.5 solid #eee',
+        color: '#333'
+        },
+    
+        // List block
+        statItem: {
+        marginBottom: 6
+        },
+        statLabel: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#333'
+        },
+        statValue: {
+        fontSize: 10,
+        color: '#555'
+        }
+    });
+      
+    // Function definition
     const handleExportToPdf = async () => {
-        setLoading(true); // Provide feedback to the user
-        setError('');
+        const doc = (
+            <Document>
+                <Page size="A4" style={styles.page}>
 
-        // Get the element to capture. You might need to add an `id` to the main content area.
-        // For example, the div with className="p-4 md:p-6 bg-neutral-800 rounded-lg shadow-lg"
-        // Let's assume you add id="report-content" to that div.
-        const reportElement = document.getElementById('report-content');
+                    {/* Header */}
+                    <Text style={styles.title}>
+                    Analysis Report: {selectedStore} from {dateRange.start} to {dateRange.end}
+                    </Text>
 
-        if (!reportElement) {
-            setError("Could not find the report content to export.");
-            setLoading(false);
-        }
+                    {/* Sales Report Table */}
+                    <Text style={styles.title2}>Sales Report</Text>
+                    <View style={styles.table}>
+                    <View style={styles.tableRow}>
+                        <Text style={styles.tableCellHeader}>Item</Text>
+                        <Text style={styles.tableCellHeader}>Cash</Text>
+                        <Text style={styles.tableCellHeader}>Card</Text>
+                        <Text style={styles.tableCellHeader}>SnapScan</Text>
+                        <Text style={styles.tableCellHeader}>Other</Text>
+                        <Text style={styles.tableCellHeader}>Total</Text>
+                    </View>
+                    {Object.values(salesTotals).sort((a, b) => b.Total - a.Total).map((sale, index) => (
+                        <View key={index} style={styles.tableRow}>
+                        <Text style={styles.tableCell}>{sale.Product}</Text>
+                        <Text style={styles.tableCell}>R {sale.Cash.toFixed(2)}</Text>
+                        <Text style={styles.tableCell}>R {sale.Card.toFixed(2)}</Text>
+                        <Text style={styles.tableCell}>R {sale.Snapscan.toFixed(2)}</Text>
+                        <Text style={styles.tableCell}>R {sale.Other.toFixed(2)}</Text>
+                        <Text style={styles.tableCell}>R {sale.Total.toFixed(2)}</Text>
+                        </View>
+                    ))}
+                    </View>
 
-        try {
-            // html2canvas options - these can be tweaked for better results
-            const canvas = await html2canvas(reportElement, {
-                scale: 2, // Increase scale for better resolution, but larger file size
-                useCORS: true, // If you have images from other domains
-                backgroundColor: '#1f2937', // bg-neutral-800, match your main background
-                onclone: (document) => {
-                    // This function is called when html2canvas clones the document
-                    // It's a good place to make sure styles are applied correctly
-                    // For Tailwind, styles are generally inline or via classes, so it should work.
-                    // However, for complex scenarios, you might need to embed styles or ensure
-                    // that the cloned document has access to all necessary CSS.
+                    {/* Refunds Table */}
+                    <Text style={styles.title2}>Refunds Issued</Text>
+                    <View style={styles.table}>
+                    <View style={styles.tableRow}>
+                        <Text style={styles.tableCellHeader}>Crew Member</Text>
+                        <Text style={styles.tableCellHeader}>Item</Text>
+                        <Text style={styles.tableCellHeader}>Method</Text>
+                        <Text style={styles.tableCellHeader}>Reason</Text>
+                        <Text style={styles.tableCellHeader}>Amount</Text>
+                    </View>
+                    {refundTotals.map((refund, index) => (
+                        <View key={index} style={styles.tableRow}>
+                        <Text style={styles.tableCell}>{refund.staffName}</Text>
+                        <Text style={styles.tableCell}>{refund.item}</Text>
+                        <Text style={styles.tableCell}>{refund.method}</Text>
+                        <Text style={styles.tableCell}>{refund.reason}</Text>
+                        <Text style={styles.tableCell}>R {refund.amount.toFixed(2)}</Text>
+                        </View>
+                    ))}
+                    </View>
 
-                    // Example: if you had external stylesheets not picked up, you might link them here.
-                    // For Tailwind, this is usually not an issue if it's processed and included in your main CSS.
-                }
-            });
+                    {/* Crew Table */}
+                    <Text style={styles.title2}>Crew Performance</Text>
+                    <View style={styles.table}>
+                    <View style={styles.tableRow}>
+                        <Text style={styles.tableCellHeader}>Crew Member</Text>
+                        <Text style={styles.tableCellHeader}>Transactions</Text>
+                        <Text style={styles.tableCellHeader}>Avg Sale</Text>
+                        <Text style={styles.tableCellHeader}>Total Sales</Text>
+                        <Text style={styles.tableCellHeader}>Most Sold Product</Text>
+                    </View>
+                    {staffTotals.sort((a, b) => b.total - a.total).map((staff, index) => (
+                        <View key={index} style={styles.tableRow}>
+                        <Text style={styles.tableCell}>{staff.staffName}</Text>
+                        <Text style={styles.tableCell}>{staff.transactions}</Text>
+                        <Text style={styles.tableCell}>R {staff.averageSale.toFixed(2)}</Text>
+                        <Text style={styles.tableCell}>R {staff.total.toFixed(2)}</Text>
+                        <Text style={styles.tableCell}>{staff.mostPopularProduct}</Text>
+                        </View>
+                    ))}
+                    </View>
 
-            const imgData = canvas.toDataURL('image/png');
+                    {/* Stats List */}
+                    <Text style={styles.title2}>Summary Statistics</Text>
+                    <View>
+                    {[
+                        { label: "Peak Hour", value: calculatedStats.peakHour },
+                        { label: "Busiest Day (Value)", value: calculatedStats.bestDay },
+                        { label: "Most Used Payment", value: calculatedStats.topPaymentMethod },
+                        { label: "Refund Rate", value: `${calculatedStats.refundRate}%` },
+                        { label: "Avg Items/Sale", value: calculatedStats.avgItemsPerSale },
+                        { label: "Revenue/Active Hour", value: `R${calculatedStats.revenuePerHour.toFixed(2)}` }
+                    ].map((stat, index) => (
+                        <View key={index} style={styles.statItem}>
+                        <Text>
+                            <Text style={styles.statLabel}>{stat.label}: </Text>
+                            <Text style={styles.statValue}>{stat.value}</Text>
+                        </Text>
+                        </View>
+                    ))}
+                    </View>
 
-            // Calculate PDF dimensions
-            // Standard A4 dimensions in points (72 DPI): 595.28 x 841.89
-            // You might want to adjust this based on your content's aspect ratio
-            const pdfWidth = 210; // A4 width in mm
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width; // Maintain aspect ratio
+                </Page>
+            </Document>
 
-            const pdf = new jsPDF({
-                orientation: pdfWidth > pdfHeight ? 'l' : 'p', // landscape or portrait
-                unit: 'mm',
-                format: [pdfWidth, pdfHeight] // or 'a4' and then fit the image
-            });
+        );
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        const blob = await pdf(doc).toBlob();
+        const url = URL.createObjectURL(blob);
 
-            // Get current date for filename
-            const today = new Date();
-            const dateStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
-            const storeName = stores.find(s => s.id === selectedStore)?.name || selectedStore;
-            const safeStoreName = storeName.replace(/[^a-zA-Z0-9]/g, '_'); // Sanitize store name for filename
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'report.pdf';
+        link.click();
 
-            pdf.save(`Chillzone_Report_${safeStoreName}_${dateStr}.pdf`);
+        URL.revokeObjectURL(url); // Cleanup
 
-        } catch (err) {
-            console.error("Error generating PDF:", err);
-            setError("Failed to generate PDF. " + err.message);
-        } finally {
-            setLoading(false);
-        }
     };
 
     
     return (
         <RouteGuard requiredRoles={['manager']} currentRole={staffAuth?.accountType}>
             <div className="min-h-screen bg-neutral-900 p-4 md:p-8">
-                <div className="max-w-6xl mx-auto">
-                    <h1 className="text-3xl font-bold text-white mb-8 text-center md:text-left">Chillzone Reports</h1>
+                <div className="">
 
                     <div className="bg-neutral-800 p-6 rounded-lg shadow-lg mb-8">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
@@ -433,7 +545,7 @@ export default function Reports() {
                                         className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
                                         disabled={loading} // Disable if data is still loading
                                     >
-                                        {loading ? 'Generating...' : 'Export to PDF - Not Working Yet'}
+                                        {loading ? 'Generating...' : 'Export to PDF'}
                                     </button>
                             </div>
                         </div>

@@ -12,17 +12,24 @@ export default function Specials() {
     const [newSpecial, setNewSpecial] = useState({
         name: '',
         description: '',
+        triggerType: 'product', // 'product' or 'category'
         triggerProduct: '', // Product that needs to be bought
         triggerProductSize: '', // Added for coffee size selection
+        triggerCategory: '', // Category that needs to be bought
+        triggerCategorySize: '', // Size for category-based trigger
         triggerQuantity: 1, // Quantity needed to trigger special
+        rewardType: 'product', // 'product' or 'category'
         rewardProduct: '', // Product that will be free/discounted
         rewardProductSize: '', // Added for coffee size selection
+        rewardCategory: '', // Category for reward
+        rewardCategorySize: '', // Size for category-based reward
         rewardQuantity: 1, // Quantity of products to reward
         discountType: 'free', // 'free' or 'percentage'
         discountValue: 100, // 100 for free, or percentage value
         active: true,
         startDate: '',
         endDate: '',
+        mutuallyExclusive: false,
     });
     const [editingId, setEditingId] = useState(null);
     const [successMessage, setSuccessMessage] = useState('');
@@ -68,17 +75,24 @@ export default function Specials() {
         setNewSpecial({
             name: '',
             description: '',
+            triggerType: 'product', 
             triggerProduct: '',
             triggerProductSize: '',
-            triggerQuantity: 1,
+            triggerCategory: '',
+            triggerCategorySize: '',
+            triggerQuantity: 1, 
+            rewardType: 'product', 
             rewardProduct: '',
             rewardProductSize: '',
-            rewardQuantity: 1,
-            discountType: 'free',
-            discountValue: 100,
+            rewardCategory: '',
+            rewardCategorySize: '',
+            rewardQuantity: 1, 
+            discountType: 'free', 
+            discountValue: 100, 
             active: true,
             startDate: '',
             endDate: '',
+            mutuallyExclusive: false,
         });
         setEditingId(null);
     };
@@ -101,17 +115,24 @@ export default function Specials() {
         setNewSpecial({
             name: special.name,
             description: special.description,
-            triggerProduct: special.triggerProduct,
+            triggerType: special.triggerType || 'product', 
+            triggerProduct: special.triggerProduct || '',
             triggerProductSize: special.triggerProductSize || '',
+            triggerCategory: special.triggerCategory || '',
+            triggerCategorySize: special.triggerCategorySize || '',
             triggerQuantity: special.triggerQuantity,
-            rewardProduct: special.rewardProduct,
+            rewardType: special.rewardType || 'product', 
+            rewardProduct: special.rewardProduct || '',
             rewardProductSize: special.rewardProductSize || '',
+            rewardCategory: special.rewardCategory || '',
+            rewardCategorySize: special.rewardCategorySize || '',
             rewardQuantity: special.rewardQuantity,
             discountType: special.discountType,
             discountValue: special.discountValue,
             active: special.active,
             startDate: special.startDate || '',
             endDate: special.endDate || '',
+            mutuallyExclusive: special.mutuallyExclusive || false,
         });
     };
 
@@ -120,8 +141,66 @@ export default function Specials() {
         setSuccessMessage('');
         setErrorMessage('');
 
-        if (!newSpecial.name.trim() || !newSpecial.triggerProduct || !newSpecial.rewardProduct) {
-            setErrorMessage('Please fill in all required fields');
+        // Validate required fields
+        if (!newSpecial.name.trim()) {
+            setErrorMessage('Please enter a special name');
+            return;
+        }
+
+        // Validate trigger conditions
+        if (!newSpecial.triggerType) {
+            setErrorMessage('Please select a trigger type');
+            return;
+        }
+        if (newSpecial.triggerType === 'product' && !newSpecial.triggerProduct) {
+            setErrorMessage('Please select a trigger product');
+            return;
+        }
+        if (newSpecial.triggerType === 'category' && !newSpecial.triggerCategory) {
+            setErrorMessage('Please select a trigger category');
+            return;
+        }
+        if (newSpecial.triggerType === 'product' && newSpecial.triggerProductSize && !newSpecial.triggerProductSize.trim()) {
+            setErrorMessage('Please select a trigger product size');
+            return;
+        }
+        if (newSpecial.triggerType === 'category' && newSpecial.triggerCategorySize && !newSpecial.triggerCategorySize.trim()) {
+            setErrorMessage('Please select a trigger category size');
+            return;
+        }
+        if (!newSpecial.triggerQuantity || newSpecial.triggerQuantity < 1) {
+            setErrorMessage('Please enter a valid trigger quantity');
+            return;
+        }
+
+        // Validate reward conditions
+        if (!newSpecial.rewardType) {
+            setErrorMessage('Please select a reward type');
+            return;
+        }
+        if (newSpecial.rewardType === 'product' && !newSpecial.rewardProduct) {
+            setErrorMessage('Please select a reward product');
+            return;
+        }
+        if (newSpecial.rewardType === 'category' && !newSpecial.rewardCategory) {
+            setErrorMessage('Please select a reward category');
+            return;
+        }
+        if (newSpecial.rewardType === 'product' && newSpecial.rewardProductSize && !newSpecial.rewardProductSize.trim()) {
+            setErrorMessage('Please select a reward product size');
+            return;
+        }
+        if (newSpecial.rewardType === 'category' && newSpecial.rewardCategorySize && !newSpecial.rewardCategorySize.trim()) {
+            setErrorMessage('Please select a reward category size');
+            return;
+        }
+        if (!newSpecial.rewardQuantity || newSpecial.rewardQuantity < 1) {
+            setErrorMessage('Please enter a valid reward quantity');
+            return;
+        }
+
+        if (newSpecial.discountType === 'percentage' && (!newSpecial.discountValue || newSpecial.discountValue < 1 || newSpecial.discountValue > 100)) {
+            setErrorMessage('Please enter a valid discount percentage (1-100)');
             return;
         }
 
@@ -131,6 +210,7 @@ export default function Specials() {
                 triggerQuantity: parseInt(newSpecial.triggerQuantity),
                 rewardQuantity: parseInt(newSpecial.rewardQuantity),
                 discountValue: parseInt(newSpecial.discountValue),
+                mutuallyExclusive: newSpecial.mutuallyExclusive || false,
             };
 
             if (editingId) {
@@ -149,6 +229,22 @@ export default function Specials() {
             setErrorMessage('Failed to save special');
             console.error('Error saving special:', error);
         }
+    };
+
+    const handleTabChange = (tab) => {
+        setNewSpecial(prev => ({
+            ...prev,
+            triggerType: tab,
+            rewardType: tab,
+            triggerProduct: '',
+            triggerProductSize: '',
+            triggerCategory: '',
+            triggerCategorySize: '',
+            rewardProduct: '',
+            rewardProductSize: '',
+            rewardCategory: '',
+            rewardCategorySize: '',
+        }));
     };
 
     const isCoffeeProduct = (productId) => {
@@ -181,32 +277,63 @@ export default function Specials() {
                             placeholder="Description"
                             className="p-2 bg-neutral-700 rounded"
                         />
+                    </div>
 
-                        {/* Trigger Product Selection */}
+                    {/* Trigger Section */}
+                    <div className="mb-4">
+                        <h3 className="text-lg font-semibold mb-2">Trigger Conditions</h3>
                         <div className="flex flex-col gap-2">
                             <select
-                                name="triggerProduct"
-                                value={newSpecial.triggerProduct}
+                                name="triggerType"
+                                value={newSpecial.triggerType}
                                 onChange={handleChange}
                                 className="p-2 bg-neutral-700 rounded"
-                                required
                             >
-                                <option value="">Select Trigger Product</option>
-                                {products.map(product => (
-                                    <option key={product.id} value={product.id}>
-                                        {product.name}
-                                    </option>
-                                ))}
+                                <option value="product">Specific Product</option>
+                                <option value="category">Category</option>
                             </select>
 
-                            {/* Show size selection for coffee products */}
-                            {isCoffeeProduct(newSpecial.triggerProduct) && (
+                            {newSpecial.triggerType === 'product' && (
+                                <select
+                                    name="triggerProduct"
+                                    value={newSpecial.triggerProduct}
+                                    onChange={handleChange}
+                                    className="p-2 bg-neutral-700 rounded"
+                                >
+                                    <option value="">Select Product</option>
+                                    {products.map(product => (
+                                        <option key={product.id} value={product.id}>
+                                            {product.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+
+                            {newSpecial.triggerType === 'category' && (
+                                <select
+                                    name="triggerCategory"
+                                    value={newSpecial.triggerCategory}
+                                    onChange={handleChange}
+                                    className="p-2 bg-neutral-700 rounded"
+                                >
+                                    <option value="">Select Category</option>
+                                    {products
+                                        .map(p => p.category)
+                                        .filter((value, index, self) => self.indexOf(value) === index)
+                                        .map(category => (
+                                            <option key={category} value={category}>
+                                                {category}
+                                            </option>
+                                        ))}
+                                </select>
+                            )}
+
+                            {newSpecial.triggerType === 'product' && isCoffeeProduct(newSpecial.triggerProduct) && (
                                 <select
                                     name="triggerProductSize"
                                     value={newSpecial.triggerProductSize}
                                     onChange={handleChange}
                                     className="p-2 bg-neutral-700 rounded"
-                                    required
                                 >
                                     <option value="">Select Size</option>
                                     {['Solo', 'Short', 'Tall', 'Black'].map(size => (
@@ -216,44 +343,91 @@ export default function Specials() {
                                     ))}
                                 </select>
                             )}
-                        </div>
 
-                        <input
-                            type="number"
-                            name="triggerQuantity"
-                            value={newSpecial.triggerQuantity}
-                            onChange={handleChange}
-                            placeholder="Quantity needed"
-                            min="1"
-                            className="p-2 bg-neutral-700 rounded"
-                            required
-                        />
+                            {newSpecial.triggerType === 'category' && newSpecial.triggerCategory === 'Coffee' && (
+                                <select
+                                    name="triggerCategorySize"
+                                    value={newSpecial.triggerCategorySize}
+                                    onChange={handleChange}
+                                    className="p-2 bg-neutral-700 rounded"
+                                >
+                                    <option value="">Select Size</option>
+                                    {['Solo', 'Short', 'Tall', 'Black'].map(size => (
+                                        <option key={size} value={size}>
+                                            {size}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
 
-                        {/* Reward Product Selection */}
-                        <div className="flex flex-col gap-2">
-                            <select
-                                name="rewardProduct"
-                                value={newSpecial.rewardProduct}
+                            <input
+                                type="number"
+                                name="triggerQuantity"
+                                value={newSpecial.triggerQuantity}
                                 onChange={handleChange}
+                                placeholder="Quantity needed"
+                                min="1"
                                 className="p-2 bg-neutral-700 rounded"
                                 required
+                            />
+                        </div>
+                    </div>
+
+                    {/* Reward Section */}
+                    <div>
+                        <h3 className="text-lg font-semibold mb-2">Reward Conditions</h3>
+                        <div className="flex flex-col gap-2">
+                            <select
+                                name="rewardType"
+                                value={newSpecial.rewardType}
+                                onChange={handleChange}
+                                className="p-2 bg-neutral-700 rounded"
                             >
-                                <option value="">Select Reward Product</option>
-                                {products.map(product => (
-                                    <option key={product.id} value={product.id}>
-                                        {product.name}
-                                    </option>
-                                ))}
+                                <option value="product">Specific Product</option>
+                                <option value="category">Category</option>
                             </select>
 
-                            {/* Show size selection for coffee rewards */}
-                            {isCoffeeProduct(newSpecial.rewardProduct) && (
+                            {newSpecial.rewardType === 'product' && (
+                                <select
+                                    name="rewardProduct"
+                                    value={newSpecial.rewardProduct}
+                                    onChange={handleChange}
+                                    className="p-2 bg-neutral-700 rounded"
+                                >
+                                    <option value="">Select Product</option>
+                                    {products.map(product => (
+                                        <option key={product.id} value={product.id}>
+                                            {product.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+
+                            {newSpecial.rewardType === 'category' && (
+                                <select
+                                    name="rewardCategory"
+                                    value={newSpecial.rewardCategory}
+                                    onChange={handleChange}
+                                    className="p-2 bg-neutral-700 rounded"
+                                >
+                                    <option value="">Select Category</option>
+                                    {products
+                                        .map(p => p.category)
+                                        .filter((value, index, self) => self.indexOf(value) === index)
+                                        .map(category => (
+                                            <option key={category} value={category}>
+                                                {category}
+                                            </option>
+                                        ))}
+                                </select>
+                            )}
+
+                            {newSpecial.rewardType === 'product' && isCoffeeProduct(newSpecial.rewardProduct) && (
                                 <select
                                     name="rewardProductSize"
                                     value={newSpecial.rewardProductSize}
                                     onChange={handleChange}
                                     className="p-2 bg-neutral-700 rounded"
-                                    required
                                 >
                                     <option value="">Select Size</option>
                                     {['Solo', 'Short', 'Tall', 'Black'].map(size => (
@@ -263,57 +437,86 @@ export default function Specials() {
                                     ))}
                                 </select>
                             )}
-                        </div>
 
-                        <input
-                            type="number"
-                            name="rewardQuantity"
-                            value={newSpecial.rewardQuantity}
-                            onChange={handleChange}
-                            placeholder="Reward quantity"
-                            min="1"
-                            className="p-2 bg-neutral-700 rounded"
-                            required
-                        />
+                            {newSpecial.rewardType === 'category' && newSpecial.rewardCategory === 'Coffee' && (
+                                <select
+                                    name="rewardCategorySize"
+                                    value={newSpecial.rewardCategorySize}
+                                    onChange={handleChange}
+                                    className="p-2 bg-neutral-700 rounded"
+                                >
+                                    <option value="">Select Size</option>
+                                    {['Solo', 'Short', 'Tall', 'Black'].map(size => (
+                                        <option key={size} value={size}>
+                                            {size}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
 
-                        <select
-                            name="discountType"
-                            value={newSpecial.discountType}
-                            onChange={handleChange}
-                            className="p-2 bg-neutral-700 rounded"
-                        >
-                            <option value="free">Free</option>
-                            <option value="percentage">Percentage Discount</option>
-                        </select>
-
-                        {newSpecial.discountType === 'percentage' && (
                             <input
                                 type="number"
-                                name="discountValue"
-                                value={newSpecial.discountValue}
+                                name="rewardQuantity"
+                                value={newSpecial.rewardQuantity}
                                 onChange={handleChange}
-                                placeholder="Discount percentage"
+                                placeholder="Reward quantity"
                                 min="1"
-                                max="100"
                                 className="p-2 bg-neutral-700 rounded"
+                                required
                             />
-                        )}
+                        </div>
+                    </div>
 
+                    <select
+                        name="discountType"
+                        value={newSpecial.discountType}
+                        onChange={handleChange}
+                        className="p-2 bg-neutral-700 rounded"
+                    >
+                        <option value="free">Free</option>
+                        <option value="percentage">Percentage Discount</option>
+                    </select>
+
+                    {newSpecial.discountType === 'percentage' && (
                         <input
-                            type="date"
-                            name="startDate"
-                            value={newSpecial.startDate}
+                            type="number"
+                            name="discountValue"
+                            value={newSpecial.discountValue}
                             onChange={handleChange}
+                            placeholder="Discount percentage"
+                            min="1"
+                            max="100"
                             className="p-2 bg-neutral-700 rounded"
                         />
+                    )}
 
+                    <input
+                        type="date"
+                        name="startDate"
+                        value={newSpecial.startDate}
+                        onChange={handleChange}
+                        className="p-2 bg-neutral-700 rounded"
+                    />
+
+                    <input
+                        type="date"
+                        name="endDate"
+                        value={newSpecial.endDate}
+                        onChange={handleChange}
+                        className="p-2 bg-neutral-700 rounded"
+                    />
+
+                    <div className="flex items-center gap-2">
                         <input
-                            type="date"
-                            name="endDate"
-                            value={newSpecial.endDate}
+                            type="checkbox"
+                            name="mutuallyExclusive"
+                            checked={newSpecial.mutuallyExclusive || false}
                             onChange={handleChange}
-                            className="p-2 bg-neutral-700 rounded"
+                            className="w-4 h-4 text-indigo-600 bg-gray-100 rounded border-gray-300 focus:ring-indigo-500"
                         />
+                        <label htmlFor="mutuallyExclusive" className="text-neutral-400">
+                            Mutually Exclusive (Cannot stack with other specials)
+                        </label>
                     </div>
 
                     <button

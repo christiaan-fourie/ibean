@@ -12,6 +12,7 @@ export default function OrderCheckout() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [specials, setSpecials] = useState([]);
   const [appliedSpecials, setAppliedSpecials] = useState([]);
+  const [vat, setVat] = useState(15/100);
 
   const handleCheckout = () => {
     console.log('Checkout button clicked');
@@ -107,10 +108,11 @@ export default function OrderCheckout() {
   }, [orderDetails]);
 
   useEffect(() => {   
-    
     const checkSpecials = () => {
       const newAppliedSpecials = [];
-      const processedSpecialIds = new Set(); // Track processed specials
+      const processedSpecialIds = new Set();
+      const mutuallyExclusiveGroups = new Map();
+      const usedSpecials = new Set(); // Track used specials per order
 
       // Validate and sort specials by priority
       const validSpecials = specials
@@ -119,40 +121,104 @@ export default function OrderCheckout() {
           const startDate = special.startDate ? new Date(special.startDate) : null;
           const endDate = special.endDate ? new Date(special.endDate) : null;
           
+          // Validate trigger conditions
+          if (!special.triggerType) return false;
+          const hasValidTrigger = special.triggerType === 'product' 
+            ? special.triggerProduct 
+            : special.triggerCategory;
+          if (!hasValidTrigger) return false;
+
+          // Validate reward conditions
+          if (!special.rewardType) return false;
+          const hasValidReward = special.rewardType === 'product' 
+            ? special.rewardProduct 
+            : special.rewardCategory;
+          if (!hasValidReward) return false;
+
+          // Validate quantities
+          if (special.triggerQuantity < 1 || special.rewardQuantity < 1) return false;
+
+          // Validate discount
+          if (special.discountType === 'percentage' && 
+              (!special.discountValue || special.discountValue < 1 || special.discountValue > 100)) {
+            return false;
+          }
+
           return special.active && 
             (!startDate || today >= startDate) && 
-            (!endDate || today <= endDate) &&
-            special.triggerProduct && // Ensure required fields exist
-            special.rewardProduct;
+            (!endDate || today <= endDate);
         })
-        .sort((a, b) => (b.discountValue || 0) - (a.discountValue || 0)); // Higher discounts first
+        .sort((a, b) => {
+          // Sort by:
+          // 1. Mutually exclusive first
+          // 2. Higher discounts
+          // 3. Alphabetical name
+          const exclusiveDiff = (b.mutuallyExclusive ? 1 : 0) - (a.mutuallyExclusive ? 1 : 0);
+          if (exclusiveDiff !== 0) return exclusiveDiff;
+          
+          const discountDiff = (b.discountValue || 0) - (a.discountValue || 0);
+          if (discountDiff !== 0) return discountDiff;
+          
+          return a.name.localeCompare(b.name);
+        });
 
       validSpecials.forEach(special => {
         try {
-          // Skip if we've already processed this special
-          if (processedSpecialIds.has(special.name)) return;
+          // Skip if we've already used this special in this order
+          if (usedSpecials.has(special.id)) return;
 
-          // Find trigger item with proper ID handling for sized products
-          const triggerItem = orderDetails.find(item => {
-            if (!item) return false; // Guard against null items
+          // For mutually exclusive specials, check if we've already applied a special
+          // that conflicts with this one
+          if (special.mutuallyExclusive) {
+            const triggerKey = special.triggerType === 'product' 
+              ? `${special.triggerProduct}_${special.triggerProductSize}`
+              : `category_${special.triggerCategory}_${special.triggerCategorySize}`;
             
-            // For coffee products with size
-            if (special.triggerProductSize) {
-              const [baseId, size] = item.id.split('_');
-              const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
-
-              return baseId === special.triggerProduct && 
-                    itemSize === special.triggerProductSize;
+            const rewardKey = special.rewardType === 'product' 
+              ? `${special.rewardProduct}_${special.rewardProductSize}`
+              : `category_${special.rewardCategory}_${special.rewardCategorySize}`;
+            
+            if (mutuallyExclusiveGroups.has(triggerKey) || mutuallyExclusiveGroups.has(rewardKey)) {
+              return;
             }
-            // For regular products without size
-            return item.id === special.triggerProduct;
-          });
-          
-          if (triggerItem && triggerItem.quantity >= special.triggerQuantity) {
-            const specialApplications = Math.floor(triggerItem.quantity / special.triggerQuantity);
-            
-            // Find reward item with same logic
-            const rewardItem = orderDetails.find(item => {
+          }
+
+          // Find trigger items
+          let triggerItems = [];
+          if (special.triggerType === 'product') {
+            triggerItems = orderDetails.filter(item => {
+              if (!item) return false;
+              if (special.triggerProductSize) {
+                const [baseId, size] = item.id.split('_');
+                const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
+                return baseId === special.triggerProduct && 
+                      itemSize === special.triggerProductSize;
+              }
+              return item.id === special.triggerProduct;
+            });
+          } else if (special.triggerType === 'category') {
+            triggerItems = orderDetails.filter(item => {
+              if (!item) return false;
+              if (special.triggerCategorySize) {
+                const [baseId, size] = item.id.split('_');
+                const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
+                return item.category === special.triggerCategory && 
+                      itemSize === special.triggerCategorySize;
+              }
+              return item.category === special.triggerCategory;
+            });
+          }
+
+          // Check if we have enough trigger items
+          const totalTriggerQuantity = triggerItems.reduce((total, item) => total + (item.quantity || 0), 0);
+          if (totalTriggerQuantity < special.triggerQuantity) {
+            return;
+          }
+
+          // Find reward items
+          let rewardItems = [];
+          if (special.rewardType === 'product') {
+            rewardItems = orderDetails.filter(item => {
               if (special.rewardProductSize) {
                 const [baseId, size] = item.id.split('_');
                 const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
@@ -161,36 +227,86 @@ export default function OrderCheckout() {
               }
               return item.id === special.rewardProduct;
             });
+          } else if (special.rewardType === 'category') {
+            rewardItems = orderDetails.filter(item => {
+              if (special.rewardCategorySize) {
+                const [baseId, size] = item.id.split('_');
+                const itemSize = item.size || (size && size.charAt(0).toUpperCase() + size.slice(1));
+                return item.category === special.rewardCategory && 
+                      itemSize === special.rewardCategorySize;
+              }
+              return item.category === special.rewardCategory;
+            });
+          }
 
-            if (rewardItem) {
-              const discountQuantity = Math.min(
-                specialApplications * special.rewardQuantity,
-                rewardItem.quantity
+          // Calculate how many times we can apply this special
+          const specialApplications = Math.min(1, Math.floor(totalTriggerQuantity / special.triggerQuantity)); // Limit to 1 application per order
+          
+          // Calculate how many reward items we can apply to
+          const availableRewardQuantity = rewardItems.reduce((total, item) => total + (item.quantity || 0), 0);
+          const maxRewardApplications = Math.floor(availableRewardQuantity / special.rewardQuantity);
+
+          const applications = Math.min(specialApplications, maxRewardApplications);
+
+          if (applications > 0) {
+            // Track which items have been used for rewards
+            const usedRewardItems = new Set();
+            let totalSavedAmount = 0;
+            
+            // Process each application
+            for (let i = 0; i < applications; i++) {
+              // Find reward items that haven't been used yet
+              const availableRewardItems = rewardItems.filter(item => 
+                !usedRewardItems.has(item.id) && (item.quantity || 0) >= special.rewardQuantity
               );
+              
+              if (availableRewardItems.length === 0) break;
+              
+              // Take the first available item
+              const rewardItem = availableRewardItems[0];
+              const savedAmount = special.discountType === 'free'
+                ? rewardItem.price * special.rewardQuantity
+                : rewardItem.price * special.rewardQuantity * (special.discountValue / 100);
+              
+              totalSavedAmount += savedAmount;
+              usedRewardItems.add(rewardItem.id);
+            }
 
-              if (discountQuantity > 0) {
-                const savedAmount = special.discountType === 'free'
-                  ? rewardItem.price * discountQuantity
-                  : (rewardItem.price * discountQuantity * (special.discountValue / 100));
+            if (totalSavedAmount > 0) {
+              usedSpecials.add(special.id); // Mark this special as used for this order
+              processedSpecialIds.add(special.id);
+              newAppliedSpecials.push({
+                id: special.id,
+                name: special.name,
+                description: special.description,
+                discountQuantity: applications * special.rewardQuantity,
+                savedAmount: totalSavedAmount,
+                triggerType: special.triggerType,
+                triggerProduct: special.triggerProduct,
+                triggerProductSize: special.triggerProductSize,
+                triggerCategory: special.triggerCategory,
+                triggerCategorySize: special.triggerCategorySize,
+                rewardType: special.rewardType,
+                rewardProduct: special.rewardProduct,
+                rewardProductSize: special.rewardProductSize,
+                rewardCategory: special.rewardCategory,
+                rewardCategorySize: special.rewardCategorySize,
+                discountType: special.discountType,
+                discountValue: special.discountValue
+              });
 
-                processedSpecialIds.add(special.id);
-                const existingIndex = newAppliedSpecials.findIndex(s => s.id === special.id);
-                if (existingIndex !== -1) {
-                  newAppliedSpecials.splice(existingIndex, 1);
-                }
-                newAppliedSpecials.push({
-                  id: special.id,
-                  name: special.name,
-                  description: special.description,
-                  discountQuantity,
-                  savedAmount,
-                  triggerProduct: triggerItem.name,
-                  triggerSize: triggerItem.size,
-                  rewardProduct: rewardItem.name,
-                  rewardSize: rewardItem.size,
-                  discountType: special.discountType,
-                  discountValue: special.discountValue
-                });
+              // Track mutually exclusive specials
+              if (special.mutuallyExclusive) {
+                const triggerKey = special.triggerType === 'product' 
+                  ? `${special.triggerProduct}_${special.triggerProductSize}`
+                  : `category_${special.triggerCategory}_${special.triggerCategorySize}`;
+                
+                const rewardKey = special.rewardType === 'product' 
+                  ? `${special.rewardProduct}_${special.rewardProductSize}`
+                  : `category_${special.rewardCategory}_${special.rewardCategorySize}`;
+                
+                mutuallyExclusiveGroups.set(triggerKey, true);
+                mutuallyExclusiveGroups.set(rewardKey, true);
               }
             }
           }
@@ -208,9 +324,6 @@ export default function OrderCheckout() {
     };
 
     checkSpecials();
-
-    
-
   }, [orderDetails, specials]);
 
   const calculateTotals = () => {
@@ -223,7 +336,7 @@ export default function OrderCheckout() {
     }, 0);
 
     subtotal -= specialsDiscount;
-    const taxRate = 0.155;
+    const taxRate = vat;
     const tax = (subtotal / (1 + taxRate)) * taxRate;
     
     return {
@@ -364,7 +477,7 @@ export default function OrderCheckout() {
           </div>
         )}
         <div className="flex justify-between text-sm text-gray-400">
-          <span>Tax included (15.5%)</span>
+          <span>Tax included {vat * 100}% </span>
           <span>R {totals.tax.toFixed(2)}</span>
         </div>
         <div className="flex justify-between font-bold text-lg text-white mt-2">

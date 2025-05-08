@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import db from '../../utils/firebase'; // Import Firestore instance
 import { collection, onSnapshot } from 'firebase/firestore'; // Firestore methods
 
-// Rename CoffeeSizeModal to VarietySelectionModal and update its logic
+
 const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
   const [selectedVariety, setSelectedVariety] = useState(null);
 
@@ -73,6 +73,53 @@ const Products = () => {
   const [selectedCoffee, setSelectedCoffee] = useState(null); // State for the product needing variety selection
   const [isSizeModalOpen, setIsSizeModalOpen] = useState(false); // State for modal visibility
   const [selectedCategory, setSelectedCategory] = useState('All'); // State for category filter
+  const [searchQuery, setSearchQuery] = useState(''); // State for search query
+  const [sortOrder, setSortOrder] = useState('name'); // New state for sorting
+
+  // Add sort options
+  const sortOptions = [
+    { value: 'name', label: 'Name A-Z' },
+    { value: 'name_desc', label: 'Name Z-A' },
+    { value: 'price', label: 'Price Low-High' },
+    { value: 'price_desc', label: 'Price High-Low' }
+  ];
+
+  // Function to sort products
+  const sortProducts = (products) => {
+    const sortedProducts = [...products];
+    
+    switch (sortOrder) {
+      case 'name':
+        return sortedProducts.sort((a, b) => a.name.localeCompare(b.name));
+      case 'name_desc':
+        return sortedProducts.sort((a, b) => b.name.localeCompare(a.name));
+      case 'price':
+        return sortedProducts.sort((a, b) => {
+          const priceA = typeof a.price === 'number' ? a.price : parseFloat(String(a.price));
+          const priceB = typeof b.price === 'number' ? b.price : parseFloat(String(b.price));
+          return priceA - priceB;
+        });
+      case 'price_desc':
+        return sortedProducts.sort((a, b) => {
+          const priceA = typeof a.price === 'number' ? a.price : parseFloat(String(a.price));
+          const priceB = typeof b.price === 'number' ? b.price : parseFloat(String(b.price));
+          return priceB - priceA;
+        });
+      default:
+        return sortedProducts;
+    }
+  };
+
+  // Function to check if a product matches the search query
+  const matchesSearch = (product) => {
+    if (!searchQuery) return true;
+    
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      product.name.toLowerCase().includes(searchLower) ||
+      (product.description && product.description.toLowerCase().includes(searchLower))
+    );
+  };
 
   // Add new useEffect for fetching categories
   useEffect(() => {
@@ -177,16 +224,21 @@ const Products = () => {
     setSelectedCoffee(null);
   };
 
-  // Filter products based on selected category
+  // Filter products based on selected category and search query
   const filteredProducts = selectedCategory === 'All'
-    ? products
-    : products.filter(product => product.category === selectedCategory);
+    ? sortProducts(products.filter(matchesSearch))
+    : sortProducts(products.filter(product => 
+        product.category === selectedCategory && matchesSearch(product)
+      ));
 
   return (
-    <div className="flex flex-col"> {/* Ensure parent container allows flex-grow */}
+    <div className="flex flex-col w-full"> {/* Ensure parent container allows flex-grow */}
 
+      
+
+      {/* Category Tabs Section & Sorting */}
       {/* Category Tabs Section */}
-      <div className="px-2 bg-neutral-900">
+      <div className="px-2 bg-neutral-900 flex justify-between w-full">
         <div className="flex justify-left space-x-4">
           {categories.map((category) => (
             <button
@@ -201,11 +253,36 @@ const Products = () => {
               {category}
             </button>
           ))}
+        </div>        
+        {/* Sort Options */}
+        <div className="bg-neutral-900">
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            className="bg-neutral-700 text-white px-3 py-2 rounded-md"
+          >
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
+      {/* Search Products */}
+      <div className="w-2/3 mt-8 mb-4 mx-auto">
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-6 py-4 w-full rounded-full text-md font-medium transition-colors bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
+          />
+        </div>
+
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex flex-wrap px-2 mt-4 gap-4 py-4 pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
+      <div className="flex flex-wrap px-2 gap-4 py-4 pr-6 overflow-y-auto"> {/* Adjusted gap from gap-6 to gap-4 */}
         {filteredProducts.map((product) => (
           <div
             key={product.id}

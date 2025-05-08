@@ -101,7 +101,7 @@ export default function DashboardHome() {
       Products: ${JSON.stringify(storeData.products)}
       Sales: ${JSON.stringify(storeData.sales)}
       Specials: ${JSON.stringify(storeData.specials)}
-      Staff: ${JSON.stringify(storeData.staff)}
+      Staff: ${JSON.stringify(storeData.staff)} - Please don't share the staff's codes
       Vouchers: ${JSON.stringify(storeData.vouchers)}
       Refunds: ${JSON.stringify(storeData.refunds)}
 
@@ -109,7 +109,7 @@ export default function DashboardHome() {
 
       Details for People:
 
-      1. Candice (Business Owner)
+      1. Candice (Business Owner) - Nickname: Candi
       2. Christiaan (Manager at Zevenwaght Mall Branch) & (Developer of iBean POS System)
       3. Nico (Manager at Westgate Mall Branch)
 
@@ -154,12 +154,12 @@ export default function DashboardHome() {
       Additional Note: The App is still in development and may not have all features available yet. So help me out if I ask about something that is not available yet.
       
       Incomplete Features:
-      - Exports (Layout is there, Data still needs to be organized and inserted, as well as the download/export pdf button)
+      - Exports (Everything is working, Perhaps we can better style the exported pdf better)
       - Vouchers System (Voucher Details to be added to the database, and the voucher code generation system is still in development)
         - Type of Voucher (Discount, Free Item, etc.)
-      - Main Sales Page (Still needs product sorting feauture)
-      - Categories Management (Needs Varieties input simplified)      
-      - Refunds Needs a input for the staff member & Item and payment method used for the refund.
+      - Main Sales Page (Still needs product sorting feauture) 
+      - Categories Management (Needs Varieties input simplified) 
+      - Specials are still stacking (One Special Per Transaction) 
 
       Sometimes the user might ask how to go about doing certain things in the app. Please give a step by step guide on how to do it. Use lists and tables to format the information.
 
@@ -177,7 +177,7 @@ export default function DashboardHome() {
       1.9 Exports Page
       1.10 Store Account Page
 
-      PS: Remember to sometimes be fun & snarky..
+      PS: Remember to sometimes be snarky.
 
       Question: ${userInput}`;
 
