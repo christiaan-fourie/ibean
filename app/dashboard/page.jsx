@@ -318,7 +318,8 @@ export default function DashboardHome() {
       Additional Note: The App is still in development and being polished. So help me out some features are not complete.
       
       Incomplete Features:
-      - Specials, sometime ovelapping
+      - Everything on the list finished now.
+      - Might Add more features in the future.
 
       Sometimes the user might ask how to go about doing certain things in the app. Please give a step by step guide on how to do it. Use lists and tables to format the information.
 
