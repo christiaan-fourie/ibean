@@ -1,10 +1,32 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { collection, addDoc, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
 import db from '../../../utils/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../../../utils/firebase';
+import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+
+// Toast Notification Component for better UX
+const Toast = ({ message, type, onClose }) => {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 5000); // Auto-dismiss after 5 seconds
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    const isSuccess = type === 'success';
+    const bgColor = isSuccess ? 'bg-green-600/30 border-green-500' : 'bg-red-600/30 border-red-500';
+    const icon = isSuccess ? <FaCheckCircle className="text-green-400" /> : <FaExclamationCircle className="text-red-400" />;
+
+    return (
+        <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border ${bgColor} animate-fade-in-up`}>
+            {icon}
+            <span>{message}</span>
+            <button onClick={onClose} className="ml-4 text-xl font-light">&times;</button>
+        </div>
+    );
+};
+
 
 export default function Refunds() {
     const [user, loadingAuth, errorAuth] = useAuthState(auth);
@@ -12,15 +34,13 @@ export default function Refunds() {
     const [staffAuth, setStaffAuth] = useState(null);
     const [loading, setLoading] = useState(false); // For form submission
     const [pageLoading, setPageLoading] = useState(true); // For initial data load
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+    const [notification, setNotification] = useState({ message: '', type: '' });
 
     const initialRefundState = {
-        productName: '', // Will be 'item' in reports
-        originalStaff: '', // Placeholder for original staff name
+        productName: '',
         amount: '',
         reason: '',
-        method: 'cash', // Default refund method (maps to 'method' in reports)
+        method: 'cash',
     };
     const [newRefund, setNewRefund] = useState(initialRefundState);
 
@@ -29,128 +49,94 @@ export default function Refunds() {
         const authData = localStorage.getItem('staffAuth');
         if (authData) {
             try {
-                const parsedAuth = JSON.parse(authData);
-                setStaffAuth(parsedAuth);
-                 // Pre-fill storeId if available in staffAuth for clarity, though it's re-confirmed on submit
-                // This assumes staffAuth might have a storeId like 'zeven@iclick.co.za'
-                // if (parsedAuth.storeId) { 
-                //     // No direct field in newRefund state for this, it's added on submit
-                // }
+                setStaffAuth(JSON.parse(authData));
             } catch (e) {
                 console.error("Failed to parse staffAuth:", e);
-                setError("Error loading staff authentication details.");
+                setNotification({ message: "Error loading staff authentication.", type: 'error' });
             }
-        } else {
-            if (!loadingAuth) { // Only set error if not still loading Firebase auth
-                 setError("Staff authentication details not found. Please log in again.");
-            }
+        } else if (!loadingAuth) {
+            setNotification({ message: "Staff authentication not found. Please log in.", type: 'error' });
         }
     }, [loadingAuth]);
 
-    // Fetch existing refunds
-    const fetchRefunds = useCallback(async () => {
+    // Fetch existing refunds in REAL-TIME
+    useEffect(() => {
+        if (!user) {
+            if (!loadingAuth) {
+                setPageLoading(false);
+                setNotification({ message: "Please log in to manage refunds.", type: 'error' });
+            }
+            return;
+        }
+
         setPageLoading(true);
-        setError('');
-        try {
-            const q = query(
-                collection(db, 'refunds'),
-                orderBy('date', 'desc') // Order by the new 'date' field
-            );
-            const querySnapshot = await getDocs(q);
+        const q = query(collection(db, 'refunds'), orderBy('date', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const refundsData = querySnapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
                     id: doc.id,
                     ...data,
-                    // Ensure date is a JS Date object for display, if it's a Firestore Timestamp
-                    date: data.date?.toDate ? data.date.toDate() : (data.date ? new Date(data.date) : new Date()),
+                    date: data.date?.toDate ? data.date.toDate() : new Date(),
                 };
             });
             setRefunds(refundsData);
-        } catch (err) {
+            setPageLoading(false);
+        }, (err) => {
             console.error('Error fetching refunds:', err);
-            setError('Failed to load refunds. ' + err.message);
-        } finally {
+            setNotification({ message: 'Failed to load refunds in real-time.', type: 'error' });
             setPageLoading(false);
-        }
-    }, []);
+        });
 
-    useEffect(() => {
-        if (user) { // Fetch refunds only if user is authenticated
-            fetchRefunds();
-        } else if (!loadingAuth && errorAuth) {
-            setError("Authentication failed: " + errorAuth.message);
-            setPageLoading(false);
-        } else if (!loadingAuth && !user) {
-            setError("Please log in to manage refunds.");
-            setPageLoading(false);
-        }
-    }, [user, loadingAuth, errorAuth, fetchRefunds]);
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
+
+    }, [user, loadingAuth]);
 
     
     // Process refund
     const handleSubmitRefund = async (e) => {
         e.preventDefault();
         if (!newRefund.productName || !newRefund.amount || !newRefund.reason || !newRefund.method) {
-            setError('Please fill in all required fields.');
+            setNotification({ message: 'Please fill in all required fields.', type: 'error' });
             return;
         }
         if (!staffAuth || !staffAuth.staffId || !staffAuth.staffName) {
-            setError('Staff authentication details are missing. Cannot process refund.');
+            setNotification({ message: 'Staff authentication is missing. Cannot process refund.', type: 'error' });
             return;
         }
         
-        // CRITICAL: Determine the correct storeId
-        // Option 1: staffAuth has a specific storeId like 'zeven@iclick.co.za'
         const storeIdentifier = staffAuth.storeId || user?.email; 
-        // Option 2: user.email is the store identifier e.g. 'zeven@iclick.co.za'
-        // Option 3: A hardcoded value based on some other logic if needed
-
         if (!storeIdentifier) {
-            setError('Store identifier could not be determined. Cannot process refund.');
+            setNotification({ message: 'Store identifier could not be determined.', type: 'error' });
             return;
         }
 
         setLoading(true);
-        setError('');
-        setSuccess('');
 
-        const currentDate = new Date();
         const refundDataToSave = {
-            productName: newRefund.productName, // Maps to 'item' in reports
+            productName: newRefund.productName,
             amount: parseFloat(newRefund.amount),
             reason: newRefund.reason,
-            method: newRefund.method, // Maps to 'method' in reports
-
-            staffName: staffAuth.staffName, // For direct use in reports
-            date: Timestamp.fromDate(currentDate), // Primary date field for reports
-            storeId: storeIdentifier, // Align with Exports page store IDs
-
-            createdBy: { // Audit information
+            method: newRefund.method,
+            staffName: staffAuth.staffName,
+            date: Timestamp.fromDate(new Date()),
+            storeId: storeIdentifier,
+            createdBy: {
                 id: staffAuth.staffId,
                 name: staffAuth.staffName,
-                role: staffAuth.accountType || 'staff', // staffAuth might have accountType
+                role: staffAuth.accountType || 'staff',
             },
-            // You can add user.uid if you want to track the Firebase Auth user ID specifically
-            // firebaseUserId: user.uid 
         };
 
         try {
-            const docRef = await addDoc(collection(db, 'refunds'), refundDataToSave);
-            setSuccess('Refund processed successfully!');
-            
-            // Add to local state for immediate UI update
-            const newRefundEntry = {
-                ...refundDataToSave,
-                id: docRef.id,
-                date: currentDate, // Use JS Date for local state
-            };
-            setRefunds(prevRefunds => [newRefundEntry, ...prevRefunds]);
-            
+            await addDoc(collection(db, 'refunds'), refundDataToSave);
+            setNotification({ message: 'Refund processed successfully!', type: 'success' });
             setNewRefund(initialRefundState); // Reset form
         } catch (err) {
             console.error('Error processing refund:', err);
-            setError('Failed to process refund. ' + err.message);
+            setNotification({ message: 'Failed to process refund. ' + err.message, type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -161,146 +147,145 @@ export default function Refunds() {
         setNewRefund(prev => ({ ...prev, [name]: value }));
     };
 
-    if (pageLoading && !user && !errorAuth) { // Show auth loading if firebase auth is still loading
+    if (pageLoading && !user && !errorAuth) {
          return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
     }
 
-
     return (
-            <div className="min-h-screen bg-neutral-900 p-4 md:p-8">
-                <div className="flex gap-4 items-top"> {/* Adjusted max-width for a more focused form */}
-                    <div className='w-1/2'>
-
-                        {/* Add Refund Form */}
-                        <div className="mb-8 p-6 bg-neutral-800 rounded-lg shadow-md">
-                            <h2 className="text-xl font-semibold text-white mb-6">Process New Refund</h2>
-                            <form onSubmit={handleSubmitRefund} className="space-y-6">
-                                <div>
-                                    <label htmlFor="productName" className="block text-sm font-medium text-neutral-300 mb-1">
-                                        Product Name / Item
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="productName"
-                                        id="productName"
-                                        value={newRefund.productName}
-                                        onChange={handleInputChange}
-                                        className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
-                                        required
-                                    />
-                                </div>
-
-                                
-                                <div>
-                                    <label htmlFor="amount" className="block text-sm font-medium text-neutral-300 mb-1">
-                                        Refund Amount (R)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        name="amount"
-                                        id="amount"
-                                        value={newRefund.amount}
-                                        onChange={handleInputChange}
-                                        step="0.01"
-                                        min="0.01"
-                                        className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="method" className="block text-sm font-medium text-neutral-300 mb-1">
-                                        Refund Method
-                                    </label>
-                                    <select
-                                        name="method"
-                                        id="method"
-                                        value={newRefund.method}
-                                        onChange={handleInputChange}
-                                        className="w-full p-2.5 bg-neutral-700 rounded text-white focus:ring-indigo-500 focus:border-indigo-500"
-                                        required
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="card">Card</option>
-                                        <option value="snapscan">SnapScan</option>
-                                        <option value="store_credit">Store Credit</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label htmlFor="reason" className="block text-sm font-medium text-neutral-300 mb-1">
-                                        Reason for Refund
-                                    </label>
-                                    <textarea
-                                        name="reason"
-                                        id="reason"
-                                        value={newRefund.reason}
-                                        onChange={handleInputChange}
-                                        className="w-full p-2.5 bg-neutral-700 rounded text-white placeholder-neutral-500 focus:ring-indigo-500 focus:border-indigo-500"
-                                        rows="3"
-                                        required
-                                    />
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={loading || !staffAuth} // Disable if loading or staffAuth not loaded
-                                    className="w-full p-2.5 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700 disabled:opacity-50 transition duration-150"
+        <div className="min-h-screen bg-neutral-900 p-4 md:p-8 text-white">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto">
+                
+                {/* Left Column: Form */}
+                <div className="bg-neutral-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-2xl font-bold text-white mb-6">Process New Refund</h2>
+                    <form onSubmit={handleSubmitRefund} className="space-y-5">
+                        <div>
+                            <label htmlFor="productName" className="block text-sm font-medium text-neutral-300 mb-1">
+                                Product Name / Item
+                            </label>
+                            <input
+                                type="text"
+                                name="productName"
+                                id="productName"
+                                value={newRefund.productName}
+                                onChange={handleInputChange}
+                                className="w-full p-3 bg-neutral-700 rounded-md text-white placeholder-neutral-400 border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                required
+                            />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="amount" className="block text-sm font-medium text-neutral-300 mb-1">
+                                    Refund Amount (R)
+                                </label>
+                                <input
+                                    type="number"
+                                    name="amount"
+                                    id="amount"
+                                    value={newRefund.amount}
+                                    onChange={handleInputChange}
+                                    step="0.01"
+                                    min="0.01"
+                                    className="w-full p-3 bg-neutral-700 rounded-md text-white placeholder-neutral-400 border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="method" className="block text-sm font-medium text-neutral-300 mb-1">
+                                    Refund Method
+                                </label>
+                                <select
+                                    name="method"
+                                    id="method"
+                                    value={newRefund.method}
+                                    onChange={handleInputChange}
+                                    className="w-full p-3 bg-neutral-700 rounded-md text-white border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    required
                                 >
-                                    {loading ? 'Processing...' : 'Process Refund'}
-                                </button>
-                            </form>
+                                    <option value="cash">Cash</option>
+                                    <option value="card">Card</option>
+                                    <option value="snapscan">SnapScan</option>
+                                    <option value="store_credit">Store Credit</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
                         </div>
-                    </div>
-                    <div className='w-1/2'>
-                        {/* Refunds List */}
-                        <div className="">
-                                                
-                                                {pageLoading && !refunds.length ? (
-                                                    <p className="text-neutral-400 text-center py-4">Loading recent refunds...</p>
-                                                ) : refunds.length > 0 ? (
-                                                    <div className="space-y-4">
-                                                        {refunds.map(refund => (
-                                                            <div key={refund.id} className="p-4 bg-neutral-800 rounded-lg shadow">
-                                                                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                                                                    <div className="flex-grow">
-                                                                        <p className="text-lg font-medium text-white">{refund.productName}</p>
-                                                                        <p className="text-sm text-neutral-400">
-                                                                            Amount: R {typeof refund.amount === 'number' ? refund.amount.toFixed(2) : refund.amount}
-                                                                        </p>
-                                                                        <p className="text-sm text-neutral-400 capitalize"> 
-                                                                            Method: {refund.method?.replace('_', ' ') || 'N/A'}
-                                                                        </p>
-                                                                        <p className="mt-1 text-sm text-neutral-300">
-                                                                            Reason: {refund.reason}
-                                                                        </p>
-                                                                    </div>
-                                                                    <div className="text-xs sm:text-sm text-neutral-500 sm:text-right flex-shrink-0 mt-2 sm:mt-0">
-                                                                        <p className="font-semibold text-indigo-400">
-                                                                            By: {refund.staffName || refund.createdBy?.name || 'Unknown Staff'}
-                                                                        </p>
-                                                                        <p>Store: {refund.storeId || 'N/A'}</p>
-                                                                        <p>{refund.date ? new Date(refund.date).toLocaleDateString() : 'No date'} {refund.date ? new Date(refund.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <p className="text-neutral-400 text-center py-4">
-                                                        No refunds recorded yet.
-                                                    </p>
-                                                )}
-                        </div>
-                    </div>                
 
-                    
+                        <div>
+                            <label htmlFor="reason" className="block text-sm font-medium text-neutral-300 mb-1">
+                                Reason for Refund
+                            </label>
+                            <textarea
+                                name="reason"
+                                id="reason"
+                                value={newRefund.reason}
+                                onChange={handleInputChange}
+                                className="w-full p-3 bg-neutral-700 rounded-md text-white placeholder-neutral-400 border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                rows="4"
+                                required
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading || !staffAuth || !user}
+                            className="w-full p-3 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
+                        >
+                            {loading ? 'Processing...' : 'Process Refund'}
+                        </button>
+                    </form>
                 </div>
-                    {/* Messages */}
-                    {error && <div className=" p-3 bg-red-600/30 border border-red-500 rounded text-white text-sm">{error}</div>}
-                    {success && <div className=" p-3 bg-green-600/30 border border-green-500 rounded text-white text-sm">{success}</div>}
 
+                {/* Right Column: List */}
+                <div className="bg-neutral-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-2xl font-bold text-white mb-6">Recent Refunds</h2>
+                    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                        {pageLoading ? (
+                            <p className="text-neutral-400 text-center py-4">Loading recent refunds...</p>
+                        ) : refunds.length > 0 ? (
+                            refunds.map(refund => (
+                                <div key={refund.id} className="p-4 bg-neutral-700/50 rounded-lg border border-neutral-700">
+                                    <div className="flex justify-between items-start gap-4">
+                                        <div className="flex-grow">
+                                            <p className="text-lg font-semibold text-white">{refund.productName}</p>
+                                            <p className="text-sm text-indigo-300 font-medium">
+                                                R {typeof refund.amount === 'number' ? refund.amount.toFixed(2) : refund.amount}
+                                            </p>
+                                            <p className="mt-2 text-sm text-neutral-300">
+                                                {refund.reason}
+                                            </p>
+                                        </div>
+                                        <div className="text-xs text-neutral-400 text-right flex-shrink-0">
+                                            <p className="font-medium text-white">
+                                                {refund.staffName || 'Unknown'}
+                                            </p>
+                                            <p className="capitalize">
+                                                {refund.method?.replace('_', ' ') || 'N/A'}
+                                            </p>
+                                            <p>{refund.date ? refund.date.toLocaleDateString() : 'No date'}</p>
+                                            <p>{refund.date ? refund.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center py-10">
+                                <p className="text-neutral-400">No refunds have been recorded yet.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
+            
+            {/* Toast Notification Area */}
+            {notification.message && (
+                <Toast 
+                    message={notification.message} 
+                    type={notification.type} 
+                    onClose={() => setNotification({ message: '', type: '' })} 
+                />
+            )}
+        </div>
     );
 }
