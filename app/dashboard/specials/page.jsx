@@ -166,21 +166,19 @@ export default function Specials() {
         return true;
     });
 
-    const renderSizeDropdown = (type, value, onChange) => {
-        const name = `${type}Size`;
+    const renderSizeDropdown = (field, value, onChange) => {
         let categoryName = '';
-        if (newSpecial[`${type}Type`] === 'product') {
-            const product = products.find(p => p.id === newSpecial[type]);
+        if (field === 'triggerProduct' || field === 'rewardProduct') {
+            const product = products.find(p => p.id === newSpecial[field]);
             categoryName = product?.category;
-        } else {
-            categoryName = newSpecial[`${type}Category`];
+        } else if (field === 'triggerCategory' || field === 'rewardCategory') {
+            categoryName = newSpecial[field];
         }
-        
         const varieties = getVarietiesForCategory(categoryName);
         if (varieties.length === 0) return null;
 
         return (
-            <select name={name} value={value} onChange={onChange} className="p-2 bg-neutral-700 rounded w-full">
+            <select name={`${field}Size`} value={value} onChange={onChange} className="p-2 bg-neutral-700 rounded w-full">
                 <option value="">Any Size</option>
                 {varieties.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
@@ -218,7 +216,10 @@ export default function Specials() {
                                     {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                 </select>
                             )}
-                            {renderSizeDropdown('trigger', newSpecial.triggerProductSize || newSpecial.triggerCategorySize, handleChange)}
+                            {newSpecial.triggerType === 'product'
+  ? renderSizeDropdown('triggerProduct', newSpecial.triggerProductSize, handleChange)
+  : renderSizeDropdown('triggerCategory', newSpecial.triggerCategorySize, handleChange)
+}
                             <input type="number" name="triggerQuantity" value={newSpecial.triggerQuantity} onChange={handleChange} placeholder="Quantity needed" min="1" className="p-2 bg-neutral-700 rounded w-full" required />
                         </div>
 
@@ -240,7 +241,10 @@ export default function Specials() {
                                     {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                 </select>
                             )}
-                            {renderSizeDropdown('reward', newSpecial.rewardProductSize || newSpecial.rewardCategorySize, handleChange)}
+                            {newSpecial.rewardType === 'product'
+      ? renderSizeDropdown('rewardProduct', newSpecial.rewardProductSize, handleChange)
+      : renderSizeDropdown('rewardCategory', newSpecial.rewardCategorySize, handleChange)
+    }
                             <input type="number" name="rewardQuantity" value={newSpecial.rewardQuantity} onChange={handleChange} placeholder="Reward quantity" min="1" className="p-2 bg-neutral-700 rounded w-full" required />
                         </div>
                     </div>
