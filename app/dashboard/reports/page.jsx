@@ -87,6 +87,14 @@ export default function Reports() {
         }
     }, []);
 
+    // NEW: Automatically set the store for staff members
+    useEffect(() => {
+        if (staffAuth?.accountType === 'staff' && user?.email) {
+            setSelectedStore(user.email);
+        }
+    }, [staffAuth, user]);
+
+
     // Fetch ALL data from Firestore
     const fetchAllMasterData = useCallback(async () => {
         if (!user && !loadingAuth) {
@@ -742,21 +750,35 @@ export default function Reports() {
 
     
     return (
-        <RouteGuard requiredRoles={['manager']} currentRole={staffAuth?.accountType}>
+        <RouteGuard requiredRoles={['manager', 'staff']} currentRole={staffAuth?.accountType}>
             <div className="min-h-screen bg-neutral-900 p-4 md:p-8">
                 <div className="">
 
                     <div className="bg-neutral-800 p-6 rounded-lg shadow-lg mb-8">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                            {staffAuth?.accountType === 'manager' && (
+                            {staffAuth?.accountType === 'manager' ? (
                                 <div>
                                     <label htmlFor="storeSelect" className="block text-sm font-medium text-neutral-300 mb-1">Select Store</label>
-                                    <select id="storeSelect" value={selectedStore} onChange={handleStoreChange} className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500">
+                                    <select
+                                        id="storeSelect"
+                                        value={selectedStore}
+                                        onChange={handleStoreChange}
+                                        className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500"
+                                    >
                                         <option value="All stores">All stores</option>
-                                        {stores.map(store => (<option key={store.id} value={store.id}>{store.name}</option>))}
+                                        {stores.map(store => (
+                                            <option key={store.id} value={store.id}>{store.name}</option>
+                                        ))}
                                     </select>
                                 </div>
-                            )}
+                            ) : staffAuth?.accountType === 'staff' ? (
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-300 mb-1">Store</label>
+                                    <div className="w-full p-2 bg-neutral-700 rounded text-white">
+                                        {stores.find(store => store.id === user?.email)?.name || user?.email || 'Loading...'}
+                                    </div>
+                                </div>
+                            ) : null}
                             <div>
                                 <label htmlFor="startDate" className="block text-sm font-medium text-neutral-300 mb-1">Start Date</label>
                                 <input id="startDate" type="date" value={dateRange.start} onChange={(e) => handleDateChange(e, 'start')} className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500" />

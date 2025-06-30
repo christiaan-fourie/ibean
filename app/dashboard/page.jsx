@@ -10,91 +10,6 @@ import { AiFillCompass } from "react-icons/ai";
 
 import DOMPurify from 'isomorphic-dompurify';
 
-// Animated robot styles
-const robotAnimationStyles = `
-  @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-5px); }
-    100% { transform: translateY(0px); }
-  }
-
-  @keyframes blink {
-    0% { opacity: 1; }
-    49% { opacity: 1; }
-    50% { opacity: 0; }
-    89% { opacity: 0; }
-    90% { opacity: 1; }
-    100% { opacity: 1; }
-  }
-
-  @keyframes shake {
-    0% { transform: translateX(0) rotate(0); }
-    20% { transform: translateX(-3px) rotate(-2deg); }
-    40% { transform: translateX(3px) rotate(2deg); }
-    60% { transform: translateX(-3px) rotate(-1deg); }
-    80% { transform: translateX(3px) rotate(1deg); }
-    100% { transform: translateX(0) rotate(0); }
-  }
-
-  @keyframes heart {
-    0% { transform: scale(1); }
-    25% { transform: scale(1.1); }
-    50% { transform: scale(1); }
-    75% { transform: scale(1.2); }
-    100% { transform: scale(1); }
-  }
-
-  .robot-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 10px;
-    margin-right: 10px;
-    animation: float 3s ease-in-out infinite;
-    position: relative;
-    font-size: 2rem;
-    transition: all 0.5s ease;
-  }
-
-  .robot-happy { color: #4ade80; }
-  .robot-sad { color: #60a5fa; }
-  .robot-angry { color: #f87171; }
-  .robot-confused { color: #fbbf24; }
-  .robot-love { color: #ec4899; }
-  .robot-neutral { color: #d1d5db; }
-
-  .robot-eyes {
-    font-size: 0.7em;
-    margin-top: 5px;
-  }
-
-  .robot-happy .robot-eyes { content: "^⩊^" }
-  .robot-sad .robot-eyes { content: "⩌.⩌" }
-  .robot-angry .robot-eyes { content: "⩒_⩒" }
-  .robot-confused .robot-eyes { content: "⩊?⩊" }
-  .robot-love .robot-eyes { content: "♥‿♥" }
-  .robot-neutral .robot-eyes { content: "•‿•" }
-
-  .robot-blink .robot-eyes {
-    animation: blink 4s infinite;
-  }
-
-  .robot-shake {
-    animation: shake 0.5s ease-in-out;
-  }
-
-  .robot-heart {
-    animation: heart 1s ease-in-out infinite;
-  }
-
-  // .robot-status {
-  //   font-size: 0.5em;
-  //   margin-top: 5px;
-  //   font-family: monospace;
-  //   color: #d1d5db;
-  // }
-`;
-
 const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
 
 export default function DashboardHome() {
@@ -103,8 +18,6 @@ export default function DashboardHome() {
   const [isLoading, setIsLoading] = useState(false);
   const [storeData, setStoreData] = useState(null);
   const [staffAuth, setStaffAuth] = useState(null);
-  const [robotMood, setRobotMood] = useState('neutral');
-  const [robotAnimation, setRobotAnimation] = useState(null);
   const messagesContainerRef = useRef(null);
 
   // Add staff auth check
@@ -424,219 +337,68 @@ export default function DashboardHome() {
 
 
 
-  // Function to analyze message sentiment and update robot mood
-  const analyzeSentiment = (message) => {
-    // Skip if no message
-    if (!message) return;
-    
-    const text = message.toLowerCase();
-    
-    // Simple keyword-based sentiment analysis
-    if (text.match(/\b(thank|thanks|great|good|excellent|awesome|happy|perfect|helpful)\b/)) {
-      setRobotMood('happy');
-      setRobotAnimation('heart');
-      setTimeout(() => setRobotAnimation(null), 2000);
-    } else if (text.match(/\b(sad|sorry|unfortunate|regret|unhappy|disappointed)\b/)) {
-      setRobotMood('sad');
-      setRobotAnimation('blink');
-      setTimeout(() => setRobotAnimation(null), 3000);
-    } else if (text.match(/\b(angry|mad|annoyed|hate|terrible|worst|awful|horrible|bad)\b/)) {
-      setRobotMood('angry');
-      setRobotAnimation('shake');
-      setTimeout(() => setRobotAnimation(null), 2000);
-    } else if (text.match(/\b(confused|unsure|maybe|perhaps|not\ssure|\?)\b/)) {
-      setRobotMood('confused');
-      setRobotAnimation('blink');
-      setTimeout(() => setRobotAnimation(null), 3000);
-    } else if (text.match(/\b(love|adore|favorite|best\sever|amazing)\b/)) {
-      setRobotMood('love');
-      setRobotAnimation('heart');
-      setTimeout(() => setRobotAnimation(null), 3000);
-    } else {
-      // If no strong sentiment, stay neutral
-      setRobotMood('neutral');
-      setRobotAnimation('blink');
-      setTimeout(() => setRobotAnimation(null), 5000);
-    }
-  };
-
-  // Update robot mood when new messages are added
-  useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'user') {
-        analyzeSentiment(lastMessage.content);
-      }
-    }
-  }, [messages]);
-
-  // Robot component
-  const RobotEmoji = useMemo(() => {
-    // const getRobotFace = () => {
-    //   switch(robotMood) {
-    //     case 'happy': return '🤖';
-    //     case 'sad': return '🤖';
-    //     case 'angry': return '🤖';
-    //     case 'confused': return '🤖';
-    //     case 'love': return '🤖';
-    //     default: return '🤖';
-    //   }
-    // };
-
-    const getRobotEyes = () => {
-      switch(robotMood) {
-        case 'happy': return '^⩊^';
-        case 'sad': return '⩌.⩌';
-        case 'angry': return '⩒_⩒';
-        case 'confused': return '⩊?⩊';
-        case 'love': return '♥‿♥';
-        default: return '•‿•';
-      }
-    };
-
-    const getStatusText = () => {
-      switch(robotMood) {
-        case 'happy': return 'HAPPY';
-        case 'sad': return 'SAD';
-        case 'angry': return 'ANGRY';
-        case 'confused': return '???';
-        case 'love': return 'LOVE!';
-        default: return 'Chilling';
-      }
-    };
-
-    const animationClass = robotAnimation ? `robot-${robotAnimation}` : '';
-    
-    return (
-      <div className={`robot-container robot-${robotMood} ${animationClass}`}>
-        {/* <div>{getRobotFace()}</div> */}
-        <div className="robot-eyes">{getRobotEyes()}</div>
-        <div className="robot-status text-xs">{getStatusText()}</div>
-      </div>
-    );
-  }, [robotMood, robotAnimation]);
-
   return (
-    <div className="flex flex-col h-screen p-6 bg-neutral-900 text-neutral-100">
-      <style dangerouslySetInnerHTML={{ __html: robotAnimationStyles }} />
+    <div className="flex flex-col h-screen p-2 sm:p-4 md:p-6 bg-neutral-900 text-neutral-100">
       
-      <div className="flex justify-between items-center mb-4 bg-neutral-800 p-2 rounded-lg shadow-lg">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 bg-neutral-800 p-2 rounded-lg shadow-lg gap-2">
         <div className="flex items-center gap-3 bg-neutral-700 p-2 rounded-lg">
           <div className="flex items-center gap-3">            
-            {RobotEmoji}
             <div>
-              <h1 className="text-2xl font-bold">iBEAN Assistant</h1>
-              <p className="text-sm text-neutral-400">Powered by gemini-2.0-flash</p>
+              <h1 className="text-xl md:text-2xl font-bold">iBEAN Assistant</h1>
+              <p className="text-xs md:text-sm text-neutral-400">Powered by Gemini 2.0 Flash</p>
             </div>
           </div>
         </div>
         
-        
-        {staffAuth && (
-          <div className="text-sm text-neutral-400">
-            Logged in as: <span className="text-white font-medium">{staffAuth.staffName}</span>
-            <span className="ml-2 px-2 py-1 bg-neutral-800 rounded text-xs capitalize">
-              {staffAuth.accountType}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className='flex flex-wrap justify-between gap-3'>
-        <div className='flex flex-wrap gap-3'>
-            {/* How to Prompt */}
-            <button 
-                onClick={() => handleSendMessage(null, 'howTo')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
+        <div className="flex items-center justify-between">
+          {staffAuth && (
+            <div className="text-xs sm:text-sm text-neutral-400 text-right">
+              Logged in as: <span className="text-white font-medium">{staffAuth.staffName}</span>
+              <span className="ml-2 px-2 py-1 bg-neutral-800 rounded text-xs capitalize">
+                {staffAuth.accountType}
+              </span>
+            </div>
+          )}
+          <button 
+                onClick={() => setMessages([])} 
+                className="flex items-center gap-2 px-3 py-2 ml-4 bg-neutral-600 hover:text-red-500 border border-neutral-600 hover:border-red-500 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200"
+                title="Clear Chat"
               >
-                <AiFillCompass className="text-blue-300" /> How to
-              </button>
-              {/* Sales Performance */}
-              <button 
-                onClick={() => handleSendMessage(null, 'sales')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-green-300" /> My Sales
-              </button>
-              {/* Products */}
-              <button 
-                onClick={() => handleSendMessage(null, 'products')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-purple-300" /> Products
-              </button>
-              {/* Coffee Help */}
-              <button 
-                onClick={() => handleSendMessage(null, 'coffee')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-yellow-300" /> Coffee Help
-              </button>
-            
-            {/* Customer Service */}
-              <button 
-                onClick={() => handleSendMessage(null, 'customers')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-red-300" /> Customers
-              </button>
-              {/* Specials prompt */}
-              <button 
-                onClick={() => handleSendMessage(null, 'specials')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-orange-300" /> Specials
-              </button>
-              {/* Vouchers prompt */}
-              <button 
-                onClick={() => handleSendMessage(null, 'vouchers')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-blue-300" /> Vouchers
-              </button>
-              {/* Troubleshooting */}
-              <button 
-                onClick={() => handleSendMessage(null, 'troubleshoot')}
-                className="px-3 py-2 bg-neutral-600 border border-blue-200 hover:border-blue-600 text-white rounded-lg mb-2 hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-1"
-              >
-                <FaGem className="text-teal-300" /> Help Me!
-              </button>
-          
-
-            
+                <FaTrashAlt />
+                <span className="hidden sm:inline">Clear</span>
+          </button>
         </div>
-        {/* Clear Chat */}
-        <button 
-              onClick={() => setMessages([])} 
-              className="flex items-center gap-2 px-4 py-2 bg-neutral-600 hover:text-red-600 border border-red-600 text-white rounded-lg mb-4 hover:bg-neutral-700 transition-colors duration-200"
-            >
-              <FaTrashAlt /> Clear Chat
-        </button>
-        
       </div>
       
-      <div ref={messagesContainerRef} className="flex-1 bg-neutral-800 rounded-lg shadow-lg p-4 mb-4 overflow-auto border border-neutral-700" style={{ scrollBehavior: 'smooth' }}>
+      <div ref={messagesContainerRef} className="flex-1 bg-neutral-800 rounded-lg shadow-lg p-4 mb-4 overflow-y-auto border border-neutral-700" style={{ scrollBehavior: 'smooth' }}>
         <div className="space-y-4">
         {messages.map((message, index) => (
             <div 
               key={index} 
-              className={`p-3 rounded-lg ${
+              className={`flex rounded-lg ${
                 message.role === 'user' 
-                  ? 'bg-blue-900 ml-auto max-w-[80%] text-neutral-100' 
-                  : 'bg-neutral-700 mr-auto max-w-[100%] text-neutral-100'
+                  ? 'justify-end' 
+                  : 'justify-start'
               }`}
             >
-              <div 
-                className="prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{
-                  __html: message.role === 'assistant' 
-                    ? sanitizeHtml(message.content)
-                    : message.content
-                }}
-              />
+              <div className={`p-3 rounded-lg ${
+                message.role === 'user' 
+                  ? 'bg-blue-900 text-neutral-100' 
+                  : 'bg-neutral-700 text-neutral-100'
+              }`} style={{ maxWidth: '90%' }}>
+                <div 
+                  className="prose prose-invert max-w-none overflow-x-auto"
+                  dangerouslySetInnerHTML={{
+                    __html: message.role === 'assistant' 
+                      ? sanitizeHtml(message.content)
+                      : message.content
+                  }}
+                />
+              </div>
             </div>
           ))}
           {isLoading && (
-            <div className="bg-neutral-700 rounded-lg p-3 mr-auto max-w-[80%] text-neutral-100">
+            <div className="bg-neutral-700 rounded-lg p-3 mr-auto text-neutral-100" style={{ maxWidth: '90%' }}>
               <div className="flex items-center space-x-2">
                 <div className="animate-pulse">Thinking</div>
                 <div className="animate-bounce">...</div>

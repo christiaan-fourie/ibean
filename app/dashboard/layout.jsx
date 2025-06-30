@@ -132,13 +132,13 @@ export default function RootLayout({ children }) {
             name: 'Reports', 
             icon: <AiOutlineDownload />, 
             href: '/dashboard/reports',
-            roles: ['manager']
+            roles: ['manager', 'staff']
         },
         { 
             name: 'Store Account', 
             icon: <FaStoreAlt />, 
             href: '/dashboard/store-account',
-            roles: ['manager']
+            roles: ['manager', 'staff']
         },
     ];
 

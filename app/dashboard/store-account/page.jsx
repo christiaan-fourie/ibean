@@ -25,7 +25,7 @@ const UserAccount = () => {
     };
 
     return (
-        <RouteGuard requiredRoles={['manager']}>
+        <RouteGuard requiredRoles={['manager', 'staff']}>
             <div className="min-h-screen bg-neutral-900 p-8">
                 <div className="max-w-2xl mx-auto">
                     {/* Store Profile Section */}

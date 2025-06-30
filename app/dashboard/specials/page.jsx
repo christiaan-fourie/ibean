@@ -24,8 +24,9 @@ export default function Specials() {
         rewardCategory: '', // Category for reward
         rewardCategorySize: '', // Size for category-based reward
         rewardQuantity: 1, // Quantity of products to reward
-        discountType: 'free', // 'free' or 'percentage'
+        discountType: 'free', // 'free', 'percentage', or 'fixed'
         discountValue: 100, // 100 for free, or percentage value
+        fixedDiscountAmount: 0, // for fixed amount discount
         active: true,
         startDate: '',
         endDate: '',
@@ -66,10 +67,29 @@ export default function Specials() {
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
-        setNewSpecial(prev => ({
-            ...prev,
-            [name]: type === 'checkbox' ? checked : value
-        }));
+        
+        setNewSpecial(prev => {
+            const updatedSpecial = {
+                ...prev,
+                [name]: type === 'checkbox' ? checked : value
+            };
+
+            // When discountType changes, reset related values for better data integrity
+            if (name === 'discountType') {
+                if (value === 'free') {
+                    updatedSpecial.discountValue = 100;
+                    updatedSpecial.fixedDiscountAmount = 0;
+                } else if (value === 'percentage') {
+                    // Clear fixed amount when switching to percentage
+                    updatedSpecial.fixedDiscountAmount = 0;
+                } else if (value === 'fixed') {
+                    // Clear percentage value when switching to fixed
+                    updatedSpecial.discountValue = 0;
+                }
+            }
+            
+            return updatedSpecial;
+        });
     };
 
     const resetForm = () => {
@@ -90,6 +110,7 @@ export default function Specials() {
             rewardQuantity: 1, 
             discountType: 'free', 
             discountValue: 100, 
+            fixedDiscountAmount: 0,
             active: true,
             startDate: '',
             endDate: '',
@@ -113,27 +134,41 @@ export default function Specials() {
 
     const handleStartEdit = (special) => {
         setEditingId(special.id);
+
+        // Create a mutable copy to clean up data before setting state
+        const cleanSpecial = { ...special };
+
+        // Logic to infer the correct discountType for data consistency
+        if (cleanSpecial.discountValue === 100 && !cleanSpecial.fixedDiscountAmount) {
+            cleanSpecial.discountType = 'free';
+        } else if (cleanSpecial.discountValue > 0 && !cleanSpecial.fixedDiscountAmount) {
+            cleanSpecial.discountType = 'percentage';
+        } else if (cleanSpecial.fixedDiscountAmount > 0) {
+            cleanSpecial.discountType = 'fixed';
+        }
+
         setNewSpecial({
-            name: special.name,
-            description: special.description,
-            triggerType: special.triggerType || 'product', 
-            triggerProduct: special.triggerProduct || '',
-            triggerProductSize: special.triggerProductSize || '',
-            triggerCategory: special.triggerCategory || '',
-            triggerCategorySize: special.triggerCategorySize || '',
-            triggerQuantity: special.triggerQuantity,
-            rewardType: special.rewardType || 'product', 
-            rewardProduct: special.rewardProduct || '',
-            rewardProductSize: special.rewardProductSize || '',
-            rewardCategory: special.rewardCategory || '',
-            rewardCategorySize: special.rewardCategorySize || '',
-            rewardQuantity: special.rewardQuantity,
-            discountType: special.discountType,
-            discountValue: special.discountValue,
-            active: special.active,
-            startDate: special.startDate || '',
-            endDate: special.endDate || '',
-            mutuallyExclusive: special.mutuallyExclusive || false,
+            name: cleanSpecial.name || '',
+            description: cleanSpecial.description || '',
+            triggerType: cleanSpecial.triggerType || 'product', 
+            triggerProduct: cleanSpecial.triggerProduct || '',
+            triggerProductSize: cleanSpecial.triggerProductSize || '',
+            triggerCategory: cleanSpecial.triggerCategory || '',
+            triggerCategorySize: cleanSpecial.triggerCategorySize || '',
+            triggerQuantity: cleanSpecial.triggerQuantity || 1,
+            rewardType: cleanSpecial.rewardType || 'product', 
+            rewardProduct: cleanSpecial.rewardProduct || '',
+            rewardProductSize: cleanSpecial.rewardProductSize || '',
+            rewardCategory: cleanSpecial.rewardCategory || '',
+            rewardCategorySize: cleanSpecial.rewardCategorySize || '',
+            rewardQuantity: cleanSpecial.rewardQuantity || 1,
+            discountType: cleanSpecial.discountType, // Use the cleaned type
+            discountValue: cleanSpecial.discountValue || 0,
+            fixedDiscountAmount: cleanSpecial.fixedDiscountAmount || 0,
+            active: cleanSpecial.active !== undefined ? cleanSpecial.active : true,
+            startDate: cleanSpecial.startDate || '',
+            endDate: cleanSpecial.endDate || '',
+            mutuallyExclusive: cleanSpecial.mutuallyExclusive || false,
         });
     };
 
@@ -204,19 +239,36 @@ export default function Specials() {
             setErrorMessage('Please enter a valid discount percentage (1-100)');
             return;
         }
+        if (newSpecial.discountType === 'fixed' && (!newSpecial.fixedDiscountAmount || newSpecial.fixedDiscountAmount <= 0)) {
+            setErrorMessage('Please enter a valid fixed discount amount');
+            return;
+        }
 
         try {
+            // Create a clean data object
             const specialData = {
                 ...newSpecial,
-                triggerQuantity: parseInt(newSpecial.triggerQuantity),
-                rewardQuantity: parseInt(newSpecial.rewardQuantity),
-                discountValue: parseInt(newSpecial.discountValue),
-                mutuallyExclusive: newSpecial.mutuallyExclusive || false,
+                triggerQuantity: parseInt(newSpecial.triggerQuantity, 10) || 1,
+                rewardQuantity: parseInt(newSpecial.rewardQuantity, 10) || 1,
+                mutuallyExclusive: !!newSpecial.mutuallyExclusive,
+                active: newSpecial.active,
             };
+
+            // Conditionally set discount values based on type for data integrity
+            if (newSpecial.discountType === 'free') {
+                specialData.discountValue = 100;
+                specialData.fixedDiscountAmount = 0;
+            } else if (newSpecial.discountType === 'percentage') {
+                specialData.discountValue = parseInt(newSpecial.discountValue, 10) || 0;
+                specialData.fixedDiscountAmount = 0;
+            } else if (newSpecial.discountType === 'fixed') {
+                specialData.discountValue = 0;
+                specialData.fixedDiscountAmount = parseFloat(newSpecial.fixedDiscountAmount) || 0;
+            }
 
             if (editingId) {
                 await updateDoc(doc(db, 'specials', editingId), specialData);
-                setSpecials(specials.map(s => 
+                setSpecials(specials.map(s =>
                     s.id === editingId ? { ...specialData, id: editingId } : s
                 ));
                 setSuccessMessage('Special updated successfully');
@@ -498,6 +550,7 @@ export default function Specials() {
                             >
                                 <option value="free">Free</option>
                                 <option value="percentage">Percentage Discount</option>
+                                <option value="fixed">Fixed Amount Discount</option>
                             </select>
 
                             {newSpecial.discountType === 'percentage' && (
@@ -509,6 +562,19 @@ export default function Specials() {
                                     placeholder="Discount percentage"
                                     min="1"
                                     max="100"
+                                    className="p-2 bg-neutral-700 rounded w-full md:w-1/2"
+                                />
+                            )}
+
+                            {newSpecial.discountType === 'fixed' && (
+                                <input
+                                    type="number"
+                                    name="fixedDiscountAmount"
+                                    value={newSpecial.fixedDiscountAmount}
+                                    onChange={handleChange}
+                                    placeholder="Discount amount (R)"
+                                    min="0.01"
+                                    step="0.01"
                                     className="p-2 bg-neutral-700 rounded w-full md:w-1/2"
                                 />
                             )}
@@ -626,7 +692,10 @@ export default function Specials() {
                                                 {special.rewardCategorySize && ` (${special.rewardCategorySize})`}
                                             </span>
                                             <span className="font-bold">
-                                                {special.discountType === 'free' ? ' FREE' : ` ${special.discountValue}% off`}
+                                                {special.discountType === 'free' ? ' FREE' 
+                                                    : special.discountType === 'percentage' ? ` ${special.discountValue}% off`
+                                                    : ` R${special.fixedDiscountAmount?.toFixed(2)} off`
+                                                }
                                             </span>
                                         </p>
                                         {special.mutuallyExclusive && (

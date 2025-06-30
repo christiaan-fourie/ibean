@@ -21,6 +21,9 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const [showSecondaryPayment, setShowSecondaryPayment] = useState(false);
     const [voucherDiscountedItems, setVoucherDiscountedItems] = useState([]);
 
+    // FIX: Ensure totalPrice is always treated as a number
+    const numericTotalPrice = parseFloat(totalPrice) || 0;
+
     const paymentMethods = [
         { id: 'card', name: 'Card', icon: '💳' },
         { id: 'cash', name: 'Cash', icon: '💵' },
@@ -48,13 +51,12 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
 
     // Reset calculated total when totalPrice changes
     useEffect(() => {
-        setCalculatedTotal(totalPrice);
+        setCalculatedTotal(numericTotalPrice);
         setValidatedVoucher(null);
         setRemainingAmount(0);
         setShowSecondaryPayment(false);
-        setSecondaryPaymentMethod('');
         setVoucherDiscountedItems([]);
-    }, [totalPrice]);
+    }, [numericTotalPrice]);
 
     if (!orderDetails || orderDetails.length === 0) {
         return null;
@@ -105,7 +107,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         }
         
         // Check for minimum purchase requirements
-        if (voucherData.minimumPurchase && parseFloat(totalPrice) < parseFloat(voucherData.minimumPurchase)) {
+        if (voucherData.minimumPurchase && numericTotalPrice < parseFloat(voucherData.minimumPurchase)) {
             throw new Error(`This voucher requires a minimum purchase of R${parseFloat(voucherData.minimumPurchase).toFixed(2)}.`);
         }
         
@@ -150,7 +152,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
             const voucherData = await validateVoucher(voucherCode);
             setValidatedVoucher(voucherData);
             
-            let newTotal = parseFloat(totalPrice);
+            let newTotal = numericTotalPrice;
             let voucherDiscount = 0;
             let discountedItems = [];
             
@@ -262,7 +264,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const clearVoucher = () => {
         setVoucherCode('');
         setValidatedVoucher(null);
-        setCalculatedTotal(totalPrice);
+        setCalculatedTotal(numericTotalPrice);
         setRemainingAmount(0);
         setShowSecondaryPayment(false);
         setVoucherDiscountedItems([]);
@@ -323,7 +325,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         }
     };
 
-    const handleConfirm = async () => {
+    const handleConfirm = async (paymentMethod) => {
         setError(''); // Clear previous errors
 
         if (loadingUser) {
@@ -424,6 +426,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     rewardProduct: special.rewardProduct || '',
                     discountType: special.discountType || 'free',
                     discountValue: parseFloat(special.discountValue) || 0,
+                    fixedDiscountAmount: parseFloat(special.fixedDiscountAmount) || 0, // Add this line
                     savedAmount: parseFloat(special.savedAmount) || 0
                 })) : [],
                 subtotalBeforeDiscounts: parseFloat(orderDetails.reduce((sum, item) =>
@@ -439,6 +442,13 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                 orderNumber: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, // Shortened random part
                 source: 'pos_system'
             };
+
+            if (paymentMethod === 'cash') {
+                const numericCashReceived = parseFloat(cashReceived);
+                const numericTotal = parseFloat(calculatedTotal);
+                saleDataPayload.payment.cashReceived = numericCashReceived;
+                saleDataPayload.payment.change = numericCashReceived - numericTotal;
+            }
 
             if (paymentMethod === 'voucher') {
                 if (!voucherCode) {
@@ -509,318 +519,183 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     };
 
     const getPaymentButtonText = () => {
-        if (!staffAuth) return 'Staff Login Required';
         if (processing) return 'Processing...';
-        switch (paymentMethod) {
-            case 'card': return 'Process Card Payment';
-            case 'cash': return 'Complete Cash Payment';
-            case 'snapscan': return 'Confirm SnapScan Payment';
-            case 'voucher': return 'Redeem Voucher & Complete';
-            default: return 'Select Payment Method';
+        if (!staffAuth) return 'Staff Login Required';
+        if (loadingUser) return 'Verifying...';
+        if (!user) return 'Store Login Required';
+        if (!paymentMethod) return 'Select Payment Method';
+
+        if (paymentMethod === 'voucher') {
+            if (!validatedVoucher) return 'Validate Voucher First';
+            if (showSecondaryPayment && !secondaryPaymentMethod) return 'Select Secondary Payment';
+            if (showSecondaryPayment) return `Pay R${remainingAmount} with ${secondaryPaymentMethod}`;
+            return 'Complete with Voucher';
         }
+
+        if (paymentMethod === 'cash') {
+            if (!cashReceived || parseFloat(cashReceived) < parseFloat(calculatedTotal)) {
+                return 'Enter Valid Cash Amount';
+            }
+        }
+
+        return `Confirm Payment (R${calculatedTotal})`;
     };
-    
-    const numericTotalPriceForDisplay = parseFloat(String(calculatedTotal).replace(/[^\d.-]/g, '')) || 0;
+
+    const subtotalBeforeDiscounts = orderDetails.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const specialsDiscount = appliedSpecials.reduce((sum, special) => sum + special.savedAmount, 0);
 
     return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="border border-neutral-700 bg-neutral-800 p-6 rounded-lg shadow-xl w-full max-w-3xl text-white"> {/* Increased max-width */}
-                <h2 className="text-2xl font-bold mb-6 text-center">Complete Sale</h2>
-                
-                {/* Error Display */}
-                {error && (
-                    <div className="w-full bg-red-600/20 border border-red-500 text-red-100 p-3 rounded-md mb-4 text-sm">
-                        {error}
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50">
+            <div className="bg-neutral-800 text-neutral-50 rounded-lg shadow-lg p-6 max-w-lg w-full border border-neutral-700">
+                <h2 className="text-2xl font-bold mb-4 text-white">Confirm Order</h2>
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+                <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-neutral-200">Order Summary</h3>
+                    <ul className="my-2 divide-y divide-neutral-700">
+                        {orderDetails.map((item) => (
+                            <li key={item.id} className="flex justify-between py-2 text-neutral-300">
+                                <span>{item.name} {item.size && `(${item.size})`}</span>
+                                <span>R{parseFloat(item.price).toFixed(2)} x {item.quantity}</span>
+                            </li>
+                        ))}
+                    </ul>
+                    <div className="border-t border-neutral-700 pt-2 space-y-1">
+                        <div className="flex justify-between font-semibold text-neutral-300">
+                            <span>Subtotal</span>
+                            <span>R{subtotalBeforeDiscounts.toFixed(2)}</span>
+                        </div>
+                        {specialsDiscount > 0 && (
+                             <div className="flex justify-between text-sm text-green-400">
+                                <span>Specials Discount</span>
+                                <span>-R{specialsDiscount.toFixed(2)}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between font-bold mt-2 text-xl text-white">
+                            <span>Total</span>
+                            <span>R{numericTotalPrice.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    {validatedVoucher && (
+                        <div className="mt-2">
+                            <span className="text-green-400 text-sm">
+                                Voucher Applied: {validatedVoucher.code} - 
+                                {validatedVoucher.discountType === 'percentage' ? 
+                                    ` ${validatedVoucher.discountValue}%` : 
+                                    ` R${validatedVoucher.discountValue}`} off
+                            </span>
+                        </div>
+                    )}
+                </div>
+                <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-neutral-200">Payment</h3>
+                    <div className="flex gap-2 mt-2">
+                        {paymentMethods.map(method => (
+                            <button
+                                key={method.id}
+                                onClick={() => setPaymentMethod(method.id)}
+                                className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-2
+                                ${paymentMethod === method.id ? 'bg-indigo-600 text-white' : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'}
+                                `}
+                            >
+                                <span className="text-xl">{method.icon}</span>
+                                {method.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                {paymentMethod === 'cash' && !showSecondaryPayment && (
+                     <div className="mb-4 p-4 bg-neutral-900/50 rounded-lg">
+                        <label className="block text-sm font-medium text-neutral-400">
+                            Cash Received
+                        </label>
+                        <input
+                            type="number"
+                            value={cashReceived}
+                            onChange={(e) => setCashReceived(e.target.value)}
+                            className="mt-1 block w-full px-4 py-2 border border-neutral-600 bg-neutral-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Enter cash amount from customer"
+                        />
                     </div>
                 )}
-
-                <div className="flex flex-col md:flex-row items-start justify-between gap-6">
-                    {/* Order Summary Section */}
-                    <div className="w-full md:w-1/2 bg-neutral-900/50 p-4 rounded-md border border-neutral-700">
-                        <div className="bg-neutral-700 p-3 rounded-md mb-4 text-xs">
-                            <p><span className="font-semibold">Store:</span> {user?.email || 'N/A'}</p>
-                            <p><span className="font-semibold">Staff:</span> {staffAuth?.staffName || 'N/A'} ({staffAuth?.accountType || 'N/A'})</p>
+                {paymentMethod === 'voucher' && (
+                    <div className="mb-4 p-4 bg-neutral-900/50 rounded-lg">
+                        <h3 className="text-lg font-semibold text-neutral-200">Voucher Code</h3>
+                        <div className="flex gap-2 mt-2">
+                            <input
+                                type="text"
+                                value={voucherCode}
+                                onChange={(e) => setVoucherCode(e.target.value)}
+                                className="flex-1 px-4 py-2 border border-neutral-600 bg-neutral-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                placeholder="Enter voucher code"
+                            />
+                            <button
+                                onClick={applyVoucher}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold transition-all hover:bg-green-700"
+                            >
+                                Apply
+                            </button>
                         </div>
-
-                        <h3 className="text-lg font-semibold mb-2">Order Details:</h3>
-                        <div className="max-h-48 overflow-y-auto text-sm space-y-1 pr-2"> {/* Added max-height and scroll */}
-                            {orderDetails.map(item => (
-                                <li key={item.id || item.name} className="flex justify-between list-none">
-                                    <span>{item.quantity} x {item.name} {item.size && `(${item.size})`}</span>
-                                    <span>R {( (parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0) * (item.quantity || 0) ).toFixed(2)}</span>
-                                </li>
+                        {validatedVoucher && (
+                            <div className="mt-2">
+                                <button
+                                    onClick={clearVoucher}
+                                    className="text-red-400 text-sm underline"
+                                >
+                                    Clear Voucher
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                {showSecondaryPayment && (
+                    <div className="mb-4 p-4 bg-neutral-900/50 rounded-lg">
+                        <h3 className="text-lg font-semibold text-neutral-200">Secondary Payment</h3>
+                        <div className="flex gap-2 mt-2">
+                            {secondaryPaymentMethods.map(method => (
+                                <button
+                                    key={method.id}
+                                    onClick={() => setSecondaryPaymentMethod(method.id)}
+                                    className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-2
+                                    ${secondaryPaymentMethod === method.id ? 'bg-indigo-600 text-white' : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'}
+                                    `}
+                                >
+                                    <span className="text-xl">{method.icon}</span>
+                                    {method.name}
+                                </button>
                             ))}
                         </div>
-
-                        {appliedSpecials && appliedSpecials.length > 0 && (
-                            <>
-                                <hr className="my-2 border-neutral-600" />
-                                <h4 className="text-sm font-semibold text-green-400">Applied Specials:</h4>
-                                <ul className="text-xs space-y-1 max-h-20 overflow-y-auto pr-2"> {/* Added max-height and scroll */}
-                                    {appliedSpecials.map((special, index) => (
-                                        <li key={special.id || index} className="flex justify-between text-green-400">
-                                            <span>{special.name}</span>
-                                            <span>-R {(parseFloat(special.savedAmount) || 0).toFixed(2)}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </>
-                        )}
-
-                        {validatedVoucher && validatedVoucher.voucherType === 'discount' && (
-                            <>
-                                <hr className="my-2 border-neutral-600" />
-                                <div className="flex justify-between text-green-400 font-medium">
-                                    <span>Voucher: {validatedVoucher.name}</span>
-                                    <span>-R {(parseFloat(totalPrice) - parseFloat(calculatedTotal)).toFixed(2)}</span>
-                                </div>
-                            </>
-                        )}
-
-                        {validatedVoucher && validatedVoucher.voucherType === 'freeItem' && (
-                            <>
-                                <hr className="my-2 border-neutral-600" />
-                                <div className="text-green-400 font-medium">
-                                    <span>Free Item: {typeof validatedVoucher.freeItem === 'object' 
-                                        ? validatedVoucher.freeItem.name 
-                                        : validatedVoucher.freeItem}</span>
-                                </div>
-                            </>
-                        )}
-
-                        <hr className="my-3 border-neutral-500" />
-                        <div className="flex justify-between font-bold text-xl">
-                            <span>Total:</span>
-                            <span>R {numericTotalPriceForDisplay.toFixed(2)}</span>
-                        </div>
-                    </div>
-
-                    {/* Payment Section */}
-                    <div className="w-full md:w-1/2 space-y-4">
-                        <div>
-                            <h3 className="text-lg font-semibold mb-2">Select Payment Method:</h3>
-                            <div className="grid grid-cols-2 gap-2">
-                                {paymentMethods.map((method) => (
-                                    <button
-                                        key={method.id}
-                                        onClick={() => { setPaymentMethod(method.id); setError('');}} // Clear error on method change
-                                        className={`p-3 rounded-md flex items-center justify-center gap-x-2 transition-colors text-sm font-medium
-                                        ${paymentMethod === method.id
-                                                ? 'bg-indigo-600 hover:bg-indigo-700 ring-2 ring-indigo-400 ring-offset-2 ring-offset-neutral-800'
-                                                : 'bg-neutral-700 hover:bg-neutral-600'}`}
-                                    >
-                                        <span>{method.icon}</span>
-                                        <span>{method.name}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {paymentMethod === 'cash' && (
-                            <div className="p-3 bg-neutral-700/50 rounded-md border border-neutral-600">
-                                <label htmlFor="cashReceived" className="block text-sm font-medium mb-1">Cash Received:</label>
+                        {secondaryPaymentMethod === 'cash' && (
+                            <div className="mt-2">
+                                <label className="block text-sm font-medium text-neutral-400">
+                                    Cash Received
+                                </label>
                                 <input
                                     type="number"
-                                    id="cashReceived"
                                     value={cashReceived}
                                     onChange={(e) => setCashReceived(e.target.value)}
-                                    className="w-full p-2 bg-neutral-600 rounded text-white placeholder-neutral-400"
-                                    placeholder="Enter amount received"
-                                    step="0.01"
-                                    min={numericTotalPriceForDisplay.toFixed(2)} // Ensure min is correctly set
+                                    className="mt-1 block w-full px-4 py-2 border border-neutral-600 bg-neutral-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Enter cash received"
                                 />
-                                {cashReceived && parseFloat(cashReceived) >= numericTotalPriceForDisplay && (
-                                    <div className="mt-2 text-sm text-green-400">
-                                        Change Due: R {(parseFloat(cashReceived) - numericTotalPriceForDisplay).toFixed(2)}
-                                    </div>
-                                )}
                             </div>
                         )}
-
-                        {paymentMethod === 'voucher' && (
-                            <div className="p-3 bg-neutral-700/50 rounded-md border border-neutral-600">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <label htmlFor="voucherCode" className="block text-sm font-medium">Voucher Code:</label>
-                                    <input
-                                        type="text"
-                                        id="voucherCode"
-                                        value={voucherCode}
-                                        onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                                        className="flex-1 w-full p-2 bg-neutral-600 rounded text-white placeholder-neutral-400"
-                                        placeholder="Enter voucher code"
-                                        maxLength="8"
-                                        disabled={validatedVoucher !== null}
-                                    />
-                                    {!validatedVoucher ? (
-                                        <button 
-                                            onClick={applyVoucher}
-                                            disabled={!voucherCode || voucherCode.length < 4}
-                                            className="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium
-                                            hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            Validate
-                                        </button>
-                                    ) : (
-                                        <button 
-                                            onClick={clearVoucher}
-                                            className="px-3 py-2 bg-red-600 text-white rounded-md text-sm font-medium
-                                            hover:bg-red-700"
-                                        >
-                                            Clear
-                                        </button>
-                                    )}
-                                </div>
-                                
-                                {validatedVoucher && (
-                                    <div className="bg-neutral-800 p-3 rounded-md border border-neutral-700 mb-3">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-medium text-green-400">{validatedVoucher.name}</span>
-                                            <span className="text-xs text-neutral-400">
-                                                {validatedVoucher.expirationDate ? 
-                                                    `Expires: ${new Date(validatedVoucher.expirationDate.seconds * 1000).toLocaleDateString()}` : 
-                                                    'No expiration'}
-                                            </span>
-                                        </div>
-                                        
-                                        <div className="text-sm">
-                                            {validatedVoucher.voucherType === 'discount' && validatedVoucher.discountType === 'percentage' && (
-                                                <span className="text-green-400 font-medium">{validatedVoucher.discountValue}% discount applied</span>
-                                            )}
-                                            {validatedVoucher.voucherType === 'discount' && validatedVoucher.discountType === 'fixed' && (
-                                                <span className="text-green-400 font-medium">R{validatedVoucher.discountValue.toFixed(2)} discount applied</span>
-                                            )}
-                                            {validatedVoucher.voucherType === 'freeItem' && (
-                                                <span className="text-green-400 font-medium">
-                                                    Free item: {typeof validatedVoucher.freeItem === 'object' ? 
-                                                        validatedVoucher.freeItem.name : 
-                                                        validatedVoucher.freeItem}
-                                                </span>
-                                            )}
-                                            {validatedVoucher.voucherType === 'buyXGetY' && (
-                                                <span className="text-green-400 font-medium">
-                                                    Buy one, get one free deal applied
-                                                </span>
-                                            )}
-                                        </div>
-                                        
-                                        <div className="flex justify-between items-center mt-2 text-sm">
-                                            <span className="text-white">Discount amount:</span>
-                                            <span className="text-green-400 font-medium">-R {(parseFloat(totalPrice) - parseFloat(calculatedTotal)).toFixed(2)}</span>
-                                        </div>
-
-                                        {/* Display voucher usage info */}
-                                        {validatedVoucher.redemptionCount > 0 && (
-                                            <div className="mt-2 pt-2 border-t border-neutral-700 text-xs text-neutral-400">
-                                                <span>Used {validatedVoucher.redemptionCount} {validatedVoucher.redemptionCount === 1 ? 'time' : 'times'} previously</span>
-                                                {validatedVoucher.maxRedemptions && (
-                                                    <span className="ml-1">
-                                                        ({validatedVoucher.maxRedemptions - validatedVoucher.redemptionCount} uses remaining)
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {validatedVoucher.expireAfterRedemption && (
-                                            <div className="mt-1 text-xs text-yellow-400">
-                                                ⚠️ This voucher will expire after use
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                
-                                {voucherDiscountedItems && voucherDiscountedItems.length > 0 && (
-                                    <div className="mb-3 p-2 bg-neutral-800 rounded-md border border-neutral-700 text-sm">
-                                        <div className="text-green-400 font-medium mb-1">Discounted items:</div>
-                                        <ul className="list-disc pl-5 text-xs space-y-1">
-                                            {voucherDiscountedItems.map((item, index) => (
-                                                <li key={index} className="text-neutral-300">
-                                                    {item.name}: <span className="text-green-400">-R{item.discount.toFixed(2)}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                                
-                                {showSecondaryPayment && (
-                                    <div className="mt-4 pt-4 border-t border-neutral-600">
-                                        <h4 className="text-sm font-medium text-white mb-2">
-                                            Pay Remaining Amount (R{remainingAmount.toFixed(2)})
-                                        </h4>
-                                        <div className="grid grid-cols-3 gap-2 mb-3">
-                                            {secondaryPaymentMethods.map(method => (
-                                                <button
-                                                    key={method.id}
-                                                    onClick={() => {
-                                                        setSecondaryPaymentMethod(method.id);
-                                                        setError('');
-                                                    }}
-                                                    className={`p-2 rounded-md flex items-center justify-center gap-1 text-sm
-                                                    ${secondaryPaymentMethod === method.id
-                                                        ? 'bg-indigo-600 text-white'
-                                                        : 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-                                                    }`}
-                                                >
-                                                    <span>{method.icon}</span>
-                                                    <span>{method.name}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                        
-                                        {secondaryPaymentMethod === 'cash' && (
-                                            <div className="p-2 bg-neutral-800 rounded">
-                                                <label htmlFor="cashReceived" className="block text-xs font-medium mb-1">
-                                                    Cash Received:
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    id="cashReceived"
-                                                    value={cashReceived}
-                                                    onChange={(e) => setCashReceived(e.target.value)}
-                                                    className="w-full p-2 bg-neutral-600 rounded text-white placeholder-neutral-400 text-sm"
-                                                    placeholder="Enter amount received"
-                                                    step="0.01"
-                                                    min={remainingAmount.toFixed(2)}
-                                                />
-                                                {cashReceived && parseFloat(cashReceived) >= remainingAmount && (
-                                                    <div className="mt-1 text-xs text-green-400">
-                                                        Change Due: R {(parseFloat(cashReceived) - remainingAmount).toFixed(2)}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                        
-                        <div className="pt-2 space-y-3">
-                             <button
-                                onClick={handleConfirm}
-                                disabled={!staffAuth || !user || !paymentMethod || processing || loadingUser || 
-                                    (paymentMethod === 'voucher' && !validatedVoucher) ||
-                                    (paymentMethod === 'voucher' && showSecondaryPayment && !secondaryPaymentMethod) ||
-                                    (paymentMethod === 'cash' && (!cashReceived || parseFloat(cashReceived) < numericTotalPriceForDisplay)) ||
-                                    (paymentMethod === 'voucher' && showSecondaryPayment && secondaryPaymentMethod === 'cash' && 
-                                        (!cashReceived || parseFloat(cashReceived) < remainingAmount))
-                                }
-                                className="w-full bg-green-600 text-white py-3 px-4 rounded-md font-semibold hover:bg-green-700 
-                                focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-neutral-800
-                                disabled:opacity-60 disabled:cursor-not-allowed transition duration-150"
-                            >
-                                {getPaymentButtonText()}
-                            </button>
-                            
-                            <button
-                                onClick={() => onClose(false)} // Pass false for cancellation
-                                disabled={processing}
-                                className="w-full bg-red-600 text-white py-2 px-4 rounded-md font-medium hover:bg-red-700 
-                                focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-neutral-800
-                                disabled:opacity-60 transition duration-150"
-                            >
-                                Cancel
-                            </button>
-                        </div>
                     </div>
+                )}
+                <div className="flex justify-between mt-6 border-t border-neutral-700 pt-4">
+                    <button
+                        onClick={() => onClose(false)}
+                        className="px-6 py-2 bg-neutral-600 text-neutral-200 rounded-lg font-semibold transition-all hover:bg-neutral-500"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => handleConfirm(paymentMethod)}
+                        className={`px-6 py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-2
+                        ${processing || !paymentMethod ? 'bg-indigo-800 text-neutral-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}
+                        `}
+                        disabled={processing || !paymentMethod}
+                    >
+                        {getPaymentButtonText()}
+                    </button>
                 </div>
             </div>
         </div>

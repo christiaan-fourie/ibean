@@ -1,0 +1,99 @@
+# Layout, Structure, and Data Models of the iBean System
+
+# 1. Project Overview
+# iBean is a Point of Sale (POS) and store management system designed for a multi-location coffee shop business.
+# It's built as a web application to handle sales, refunds, staff management, and complex promotional specials.
+
+# 2. Core Technologies
+# - Framework: Next.js (using the App Router)
+# - Language: JavaScript with React
+# - Backend & Database: Google Firebase (Firestore for database, Firebase Authentication for store accounts)
+# - Styling: Tailwind CSS
+# - UI Components: Primarily custom-built, with icons from `react-icons`.
+# - PDF Generation: `@react-pdf/renderer` for creating reports.
+
+# 3. Authentication & Authorization Model
+# The system has a two-tiered authentication system:
+#
+# a) Store Account (Firebase Auth):
+#    - This is the primary login for a physical store location.
+#    - Authentication is handled by Firebase Auth (email/password).
+#    - The authenticated user object (`user` from `useAuthState` or `onAuthStateChanged`) represents the STORE, not a person.
+#    - The store's email (e.g., 'zeven@iclick.co.za') acts as its unique `storeId` in the database.
+#
+# b) Staff Member (Local Storage):
+#    - This represents the individual employee using the system (e.g., a barista or manager).
+#    - Staff members do NOT have Firebase Auth accounts. They likely log in via a PIN or code on the terminal.
+#    - Their session details are stored in `localStorage` under the key 'staffAuth'.
+#    - The `staffAuth` object contains at least:
+#      - `accountType`: 'manager' or 'staff'
+#      - `name`: The staff member's name.
+#      - `storeId`: The ID of the store they are assigned to (e.g., 'zeven@iclick.co.za').
+#
+# c) Route Guarding:
+#    - A custom `<RouteGuard>` component is used to protect pages.
+#    - It checks the `accountType` from the `staffAuth` object in localStorage to grant or deny access.
+
+# 4. Firestore Data Models
+# The database is structured into several key collections:
+
+# sales:
+#   - storeId: string (e.g., 'zeven@iclick.co.za')
+#   - staffName: string
+#   - date / timestamp: Firestore Timestamp
+#   - total: number
+#   - items: array of objects [{ name, quantity, subtotal, size }]
+#   - payment: object { method: 'cash' | 'card' | 'snapscan' | 'voucher' }
+#   - voucher: (optional) object { id, code, value }
+
+# refunds:
+#   - storeId: string
+#   - staffName: string
+#   - date / timestamp: Firestore Timestamp
+#   - productName: string
+#   - amount: number
+#   - reason: string
+#   - method: string (how the refund was processed)
+
+# products:
+#   - name: string
+#   - category: string (e.g., 'Coffee', 'Pastry')
+#   - price: number or object for different sizes { small, medium, large }
+#   - sizes: (optional) array of strings ['small', 'medium', 'large']
+
+# staff:
+#   - name: string
+#   - pin: string (for login)
+#   - accountType: 'manager' | 'staff'
+#   - storeId: string (links them to a store)
+
+# vouchers:
+#   - code: string (unique code for the voucher)
+#   - voucherType: 'discount' | 'freeItem'
+#   - discountType: (if discount) 'percentage' | 'fixed'
+#   - discountValue: (if discount) number
+#   - redeemed: boolean
+#   - redeemedAt: (optional) Firestore Timestamp
+#   - redeemedBy: (optional) object { storeId, staffName }
+
+# specials:
+#   - name: string
+#   - description: string
+#   - active: boolean
+#   - startDate / endDate: string (YYYY-MM-DD)
+#   - mutuallyExclusive: boolean (if it can be combined with other offers)
+#   - triggerType: 'product' | 'category'
+#   - triggerProduct / triggerCategory: string (name of product/category)
+#   - triggerProductSize / triggerCategorySize: (optional) string
+#   - triggerQuantity: number
+#   - rewardType: 'product' | 'category'
+#   - rewardProduct / rewardCategory: string
+#   - rewardProductSize / rewardCategorySize: (optional) string
+#   - rewardQuantity: number
+#   - discountType: 'free' | 'percentage'
+#   - discountValue: (if percentage) number (e.g., 50 for 50%)
+
+# 5. Key Application Logic
+# - Reporting: The reports page fetches all data and then performs filtering and aggregation on the client-side. This is an important pattern to remember.
+# - Role-based UI: The UI changes based on the `staffAuth.accountType`. Managers can see data for "All stores" and have access to more administrative pages, while staff are typically locked to their assigned store's data.
+

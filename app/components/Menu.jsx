@@ -6,6 +6,7 @@ import { CgClose } from "react-icons/cg";
 import ManageProducts from './ManageProducts'; // Import the ManageProducts component
 import Sales from './Sales'; // Import the Sales component
 import Refunds from './Refunds'; // *** Import the new Refunds component ***
+import Reports from './Reports'; // Import the Reports component
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../../utils/firebase'; // Adjust the path as necessary
 
@@ -16,6 +17,7 @@ const Menu = () => {
   const [isManageProductsOpen, setIsManageProductsOpen] = useState(false);
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isRefundsOpen, setIsRefundsOpen] = useState(false); // *** State for Refunds popup ***
+  const [isReportsOpen, setIsReportsOpen] = useState(false); // State for Reports popup
 
   const [user, setUser] = useState(null);
   const [showConfirmLogout, setShowConfirmLogout] = useState(false);
@@ -102,6 +104,17 @@ const Menu = () => {
             </li>
             <li>
               <button
+                onClick={() => {
+                  setIsReportsOpen(true); // Open Reports popup
+                  toggleMenu(); // Close the menu
+                }}
+                className="w-full text-left bg-neutral-700 text-white py-1.5 px-3 text-sm rounded-md hover:bg-neutral-600 transition-colors"
+              >
+                Reports
+              </button>
+            </li>
+            <li>
+              <button
                 className="flex items-center gap-2 bg-neutral-700 text-white py-1.5 px-3 text-sm rounded-md hover:bg-neutral-600 transition-colors w-full text-left"
                 onClick={() => {
                     setShowConfirmLogout(true)
@@ -129,7 +142,10 @@ const Menu = () => {
       {isRefundsOpen && (
         <Refunds onClose={() => setIsRefundsOpen(false)} />
       )}
-      {/* ********************* */}
+      {/* Reports Popup */}
+      {isReportsOpen && (
+        <Reports onClose={() => setIsReportsOpen(false)} />
+      )}
 
       {/* Logout Confirmation */}
       {showConfirmLogout &&
