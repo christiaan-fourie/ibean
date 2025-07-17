@@ -112,13 +112,13 @@ const Login = () => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
       <div className="pb-8">
-            <Image
+            {/* <Image
               src="/logo.png" // Path relative to the public directory
               alt="Your Company Logo"
               width={180} // Adjust width as needed
               height={60} // Adjust height as needed
               priority // Prioritize loading the logo
-            />
+            /> */}
           </div>
       <div className="w-full max-w-md p-8 space-y-6 bg-neutral-800 rounded-lg shadow-md">
         
