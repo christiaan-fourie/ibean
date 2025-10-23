@@ -21,7 +21,7 @@ const Toast = ({ message, type, onClose }) => {
     const icon = isSuccess ? <FaCheckCircle className="text-green-400" /> : <FaExclamationCircle className="text-red-400" />;
 
     return (
-        <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border ${bgColor} animate-fade-in-up z-50`}>
+        <div className={`fixed bottom-3 right-3 p-2.5 text-sm rounded-md shadow-lg flex items-center gap-2 text-white border ${bgColor} animate-fade-in-up z-50`}>
             {icon}
             <span>{message}</span>
         </div>
@@ -109,25 +109,25 @@ const ProductDataAuditor = ({ products, categories, onStartEdit, showNotificatio
     };
 
     return (
-        <div className="mt-12 p-6 bg-neutral-800 rounded-lg border border-neutral-700">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold flex items-center gap-3"><FaTools /> Data Integrity Audit</h2>
-                <button onClick={runAudit} disabled={isScanning} className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
+        <div className="mt-6 p-3 bg-neutral-800 rounded-md border border-neutral-700">
+            <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-bold flex items-center gap-2"><FaTools className="text-sm" /> Data Integrity Audit</h2>
+                <button onClick={runAudit} disabled={isScanning} className="p-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
                     {isScanning ? 'Scanning...' : 'Scan Products'}
                 </button>
             </div>
-            <p className="text-neutral-400 mb-4 text-sm">This tool scans for data inconsistencies like incorrect types or missing fields and provides options to fix them.</p>
+            <p className="text-neutral-400 mb-2 text-xs">This tool scans for data inconsistencies like incorrect types or missing fields and provides options to fix them.</p>
             
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {issues.length > 0 ? (
                     issues.map(product => (
-                        <div key={product.id} className="p-4 bg-neutral-700/50 rounded-lg border border-amber-500/50">
-                            <h3 className="font-bold text-white">{product.name}</h3>
-                            <ul className="list-disc list-inside mt-2 space-y-2 text-sm">
+                        <div key={product.id} className="p-2 bg-neutral-700/50 rounded-md border border-amber-500/50 text-sm">
+                            <h3 className="font-bold text-white text-sm">{product.name}</h3>
+                            <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
                                 {product.issues.map((issue, index) => (
                                     <li key={index} className="flex justify-between items-center">
-                                        <span className="text-amber-400 flex items-center gap-2"><FaExclamationTriangle /> {issue.message}</span>
-                                        <button onClick={() => handleFixIssue(product, issue)} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded">
+                                        <span className="text-amber-400 flex items-center gap-1.5 text-xs"><FaExclamationTriangle className="text-xs" /> {issue.message}</span>
+                                        <button onClick={() => handleFixIssue(product, issue)} className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-700 rounded">
                                             {['INVALID_CATEGORY', 'MISSING_FIELD'].includes(issue.type) ? 'Edit Manually' : 'Attempt Fix'}
                                         </button>
                                     </li>
@@ -136,7 +136,7 @@ const ProductDataAuditor = ({ products, categories, onStartEdit, showNotificatio
                         </div>
                     ))
                 ) : (
-                    <p className="text-neutral-500 text-center py-4">No issues found, or no audit has been run yet.</p>
+                    <p className="text-neutral-500 text-center py-2 text-xs">No issues found, or no audit has been run yet.</p>
                 )}
             </div>
         </div>
@@ -322,7 +322,7 @@ export default function Products() {
 
     return (
         <RouteGuard requiredRoles={['manager']}>
-            <div className="flex flex-col min-h-screen p-4 bg-neutral-900 text-neutral-50">
+            <div className="flex flex-col h-full p-3 bg-neutral-900 text-neutral-50 overflow-y-auto">
                 {notification.message && (
                     <Toast
                         key={notification.key}
@@ -332,22 +332,22 @@ export default function Products() {
                     />
                 )}
 
-                <h1 className="text-3xl font-bold mb-6">Products Management</h1>
+                <h1 className="text-xl font-bold mb-3">Products Management</h1>
 
-                <form onSubmit={handleSubmit} className="mb-8 p-4 bg-neutral-800 rounded-lg border border-neutral-700">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <form onSubmit={handleSubmit} className="mb-4 p-2.5 bg-neutral-800 rounded-md border border-neutral-700 text-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
                         <input
                             type="text" name="name" value={newProduct.name} onChange={handleChange}
-                            placeholder="Product Name" className="p-2 bg-neutral-700 rounded" required
+                            placeholder="Product Name" className="p-1.5 text-sm bg-neutral-700 rounded" required
                         />
-                        <div className="flex flex-wrap gap-2 p-2 bg-neutral-700 rounded items-center">
+                        <div className="flex flex-wrap gap-1.5 p-1.5 bg-neutral-700 rounded items-center text-sm">
                             {categories.length === 0 ? (
                                 <p className="text-neutral-400">Loading categories...</p>
                             ) : (
                                 categories.map(category => (
                                     <button
                                         key={category.id} type="button" onClick={() => handleCategorySelect(category)}
-                                        className={`p-2 rounded transition-colors text-sm ${
+                                        className={`p-1.5 rounded transition-colors text-xs ${
                                             newProduct.category === category.name
                                                 ? 'bg-indigo-600 hover:bg-indigo-700'
                                                 : 'bg-neutral-600 hover:bg-neutral-500'
@@ -361,15 +361,15 @@ export default function Products() {
                         </div>
                         <textarea
                             name="description" value={newProduct.description} onChange={handleChange}
-                            placeholder="Description" className="p-2 bg-neutral-700 rounded md:col-span-2"
+                            placeholder="Description" className="p-1.5 text-sm bg-neutral-700 rounded md:col-span-2"
                         />
                     </div>
 
                     {selectedCategory && (
                         selectedCategory.varieties?.length > 0 ? (
-                            <div className="mb-4 p-4 bg-neutral-900/50 rounded-md">
-                                <label className="block text-sm font-medium text-neutral-300 mb-2">Variety Prices for {selectedCategory.name}</label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="mb-2 p-2 bg-neutral-900/50 rounded-md">
+                                <label className="block text-xs font-medium text-neutral-300 mb-1.5">Variety Prices for {selectedCategory.name}</label>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                     {selectedCategory.varieties.map(variety => (
                                         <div key={variety} className="flex flex-col gap-1">
                                             <label className="text-sm text-neutral-400">{variety}</label>
@@ -377,64 +377,64 @@ export default function Products() {
                                                 type="number" value={newProduct.varietyPrices[variety] || ''}
                                                 onChange={(e) => setNewProduct(prev => ({ ...prev, varietyPrices: { ...prev.varietyPrices, [variety]: e.target.value } }))}
                                                 placeholder={`Price`} step="0.01" min="0"
-                                                className="p-2 bg-neutral-700 rounded w-full" required
+                                                className="p-1.5 text-sm bg-neutral-700 rounded w-full" required
                                             />
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         ) : (
-                            <div className="mb-4 p-4 bg-neutral-900/50 rounded-md">
-                                <label className="block text-sm font-medium text-neutral-300 mb-2">Standard Price</label>
+                            <div className="mb-2 p-2 bg-neutral-900/50 rounded-md">
+                                <label className="block text-xs font-medium text-neutral-300 mb-1.5">Standard Price</label>
                                 <input
                                     type="number" name="price" value={newProduct.price} onChange={handleChange}
                                     placeholder="Product Price" step="0.01" min="0"
-                                    className="p-2 bg-neutral-700 rounded w-full max-w-xs" required={!selectedCategory?.varieties?.length}
+                                    className="p-1.5 text-sm bg-neutral-700 rounded w-full max-w-xs" required={!selectedCategory?.varieties?.length}
                                 />
                             </div>
                         )
                     )}
 
-                    <div className="flex gap-4">
-                        <button type="submit" disabled={isLoading} className="flex-grow p-2 bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
+                    <div className="flex gap-2">
+                        <button type="submit" disabled={isLoading} className="flex-grow p-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
                             {isLoading ? 'Saving...' : (editingProductId ? 'Update Product' : 'Add Product')}
                         </button>
                         {editingProductId && (
-                            <button type="button" onClick={resetForm} className="p-2 bg-neutral-600 hover:bg-neutral-500 rounded">
+                            <button type="button" onClick={resetForm} className="p-1.5 text-sm bg-neutral-600 hover:bg-neutral-500 rounded">
                                 Cancel Edit
                             </button>
                         )}
                     </div>
                 </form>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-2">
                     {products.map(product => (
-                        <div key={product.id} className="p-4 bg-neutral-800 rounded-lg border border-neutral-700 flex flex-col">
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="text-xl font-bold flex-grow pr-2">{product.name}</h3>
-                                <div className="flex gap-2 flex-shrink-0">
+                        <div key={product.id} className="p-2.5 bg-neutral-800 rounded-md border border-neutral-700 flex flex-col text-sm">
+                            <div className="flex justify-between items-start mb-1.5">
+                                <h3 className="text-base font-bold flex-grow pr-1">{product.name}</h3>
+                                <div className="flex gap-1.5 flex-shrink-0 text-sm">
                                     <button onClick={() => handleStartEdit(product)} className="text-blue-400 hover:text-blue-300"><FaEdit /></button>
                                     <button onClick={() => handleDeleteProduct(product.id)} className="text-red-400 hover:text-red-300"><FaTrashAlt /></button>
                                 </div>
                             </div>
-                            <p className="text-neutral-400 mb-2 text-sm flex-grow">{product.description}</p>
+                            <p className="text-neutral-400 mb-1.5 text-xs flex-grow">{product.description}</p>
                             {product.varietyPrices && Object.keys(product.varietyPrices).length > 0 ? (
-                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                <div className="grid grid-cols-2 gap-1 mt-1.5">
                                     {Object.entries(product.varietyPrices).map(([variety, price]) => (
-                                        <div key={variety} className="flex justify-between items-center p-2 bg-neutral-700 rounded text-sm">
+                                        <div key={variety} className="flex justify-between items-center p-1 bg-neutral-700 rounded text-xs">
                                             <span className="font-medium">{variety}</span>
                                             <span className="text-indigo-400">R {safeFormatPrice(price)}</span>
                                         </div>
                                     ))}
                                 </div>
                             ) : product.price ? (
-                                <div className="p-2 bg-neutral-700 rounded mt-2">
-                                    <span className="text-indigo-400 text-xl">R {safeFormatPrice(product.price)}</span>
+                                <div className="p-1.5 bg-neutral-700 rounded mt-1.5">
+                                    <span className="text-indigo-400 text-sm font-bold">R {safeFormatPrice(product.price)}</span>
                                 </div>
                             ) : (
-                                <p className="text-amber-500 mt-2 text-sm">No price set</p>
+                                <p className="text-amber-500 mt-1.5 text-xs">No price set</p>
                             )}
-                            <div className="mt-4 pt-2 border-t border-neutral-700 text-xs text-neutral-500">
+                            <div className="mt-2 pt-1.5 border-t border-neutral-700 text-[10px] text-neutral-500">
                                 {product.updatedBy ? (
                                     <p>Updated by: {product.updatedBy.name} on {safeFormatDate(product.updatedAt)}</p>
                                 ) : (
