@@ -404,8 +404,10 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     rewardProduct: special.rewardProduct || '',
                     discountType: special.discountType || 'free',
                     discountValue: parseFloat(special.discountValue) || 0,
-                    fixedDiscountAmount: parseFloat(special.fixedDiscountAmount) || 0, // Add this line
-                    savedAmount: parseFloat(special.savedAmount) || 0
+                    fixedDiscountAmount: parseFloat(special.fixedDiscountAmount) || 0,
+                    savedAmount: parseFloat(special.savedAmount) || 0,
+                    ...(special.instanceNumber && { instanceNumber: special.instanceNumber }),
+                    ...(special.totalInstances && { totalInstances: special.totalInstances })
                 })) : [],
                 subtotalBeforeDiscounts: parseFloat(orderDetails.reduce((sum, item) =>
                     sum + ((parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0) * (parseInt(item.quantity) || 0)), 0).toFixed(2)),
@@ -544,10 +546,23 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                   <span>Subtotal</span>
                   <span>R{subtotalBeforeDiscounts.toFixed(2)}</span>
                 </div>
-                {specialsDiscount > 0 && (
-                  <div className="flex justify-between text-sm text-green-400">
-                    <span>Specials Discount</span>
-                    <span>-R{specialsDiscount.toFixed(2)}</span>
+                {appliedSpecials && appliedSpecials.length > 0 && (
+                  <div className="text-sm text-green-400">
+                    <div className="flex justify-between font-semibold mb-1">
+                      <span>Specials Applied:</span>
+                      <span>-R{specialsDiscount.toFixed(2)}</span>
+                    </div>
+                    {appliedSpecials.map((special, index) => (
+                      <div key={index} className="flex justify-between text-xs text-green-300 ml-2">
+                        <span>
+                          • {special.name}
+                          {special.instanceNumber && special.totalInstances && (
+                            <span className="text-neutral-400"> (#{special.instanceNumber})</span>
+                          )}
+                        </span>
+                        <span>-R{parseFloat(special.savedAmount || 0).toFixed(2)}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
                 {/* Voucher Discount Line */}
