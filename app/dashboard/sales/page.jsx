@@ -5,13 +5,14 @@ import Products from "../../components/Products";
 const Sales = () => {
 
     return (
-      <div className="flex bg-neutral-900 text-neutral-50"> 
+      <div className="flex h-full bg-neutral-900 text-neutral-50"> 
 
-        <div className="w-3/4 flex pt-4 pl-4 max-h-screen overflow-auto"> 
+        <div className="flex-1 flex overflow-auto"> 
           <Products />
+          <OrderCheckout /> 
         </div> 
 
-        <OrderCheckout />       
+              
 
       </div>
     )
