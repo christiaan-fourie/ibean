@@ -338,56 +338,56 @@ export default function DashboardHome() {
 
 
   return (
-    <div className="flex flex-col h-screen p-2 sm:p-4 md:p-6 bg-neutral-900 text-neutral-100">
+    <div className="flex flex-col h-full p-3 bg-neutral-900 text-neutral-100">
       
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 bg-neutral-800 p-2 rounded-lg shadow-lg gap-2">
-        <div className="flex items-center gap-3 bg-neutral-700 p-2 rounded-lg">
-          <div className="flex items-center gap-3">            
+      <div className="flex-shrink-0 flex flex-col sm:flex-row sm:justify-between sm:items-center mb-2 bg-neutral-800 p-1.5 rounded-md shadow-lg gap-1.5">
+        <div className="flex items-center gap-2 bg-neutral-700 p-1.5 rounded-md">
+          <div className="flex items-center gap-2">            
             <div>
-              <h1 className="text-xl md:text-2xl font-bold">iBEAN Assistant</h1>
-              <p className="text-xs md:text-sm text-neutral-400">Powered by Gemini 2.0 Flash</p>
+              <h1 className="text-sm font-bold">iBEAN Assistant</h1>
+              <p className="text-[10px] text-neutral-400">Powered by Gemini 2.0 Flash</p>
             </div>
           </div>
         </div>
         
         <div className="flex items-center justify-between">
           {staffAuth && (
-            <div className="text-xs sm:text-sm text-neutral-400 text-right">
+            <div className="text-[10px] text-neutral-400 text-right">
               Logged in as: <span className="text-white font-medium">{staffAuth.staffName}</span>
-              <span className="ml-2 px-2 py-1 bg-neutral-800 rounded text-xs capitalize">
+              <span className="ml-1 px-1.5 py-0.5 bg-neutral-800 rounded text-[9px] capitalize">
                 {staffAuth.accountType}
               </span>
             </div>
           )}
           <button 
                 onClick={() => setMessages([])} 
-                className="flex items-center gap-2 px-3 py-2 ml-4 bg-neutral-600 hover:text-red-500 border border-neutral-600 hover:border-red-500 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200"
+                className="flex items-center gap-1.5 px-2 py-1 ml-2 bg-neutral-600 hover:text-red-500 border border-neutral-600 hover:border-red-500 text-white text-xs rounded-md hover:bg-neutral-700 transition-colors duration-200"
                 title="Clear Chat"
               >
-                <FaTrashAlt />
+                <FaTrashAlt className="text-xs" />
                 <span className="hidden sm:inline">Clear</span>
           </button>
         </div>
       </div>
       
-      <div ref={messagesContainerRef} className="flex-1 bg-neutral-800 rounded-lg shadow-lg p-4 mb-4 overflow-y-auto border border-neutral-700" style={{ scrollBehavior: 'smooth' }}>
-        <div className="space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 bg-neutral-800 rounded-md shadow-lg p-2.5 mb-2 overflow-y-auto border border-neutral-700" style={{ scrollBehavior: 'smooth' }}>
+        <div className="space-y-2">
         {messages.map((message, index) => (
             <div 
               key={index} 
-              className={`flex rounded-lg ${
+              className={`flex rounded-md ${
                 message.role === 'user' 
                   ? 'justify-end' 
                   : 'justify-start'
               }`}
             >
-              <div className={`p-3 rounded-lg ${
+              <div className={`p-2 rounded-md text-sm ${
                 message.role === 'user' 
                   ? 'bg-blue-900 text-neutral-100' 
                   : 'bg-neutral-700 text-neutral-100'
               }`} style={{ maxWidth: '90%' }}>
                 <div 
-                  className="prose prose-invert max-w-none overflow-x-auto"
+                  className="prose prose-invert prose-sm max-w-none overflow-x-auto"
                   dangerouslySetInnerHTML={{
                     __html: message.role === 'assistant' 
                       ? sanitizeHtml(message.content)
@@ -398,33 +398,33 @@ export default function DashboardHome() {
             </div>
           ))}
           {isLoading && (
-            <div className="bg-neutral-700 rounded-lg p-3 mr-auto text-neutral-100" style={{ maxWidth: '90%' }}>
-              <div className="flex items-center space-x-2">
-                <div className="animate-pulse">Thinking</div>
-                <div className="animate-bounce">...</div>
+            <div className="bg-neutral-700 rounded-md p-2 mr-auto text-neutral-100 text-sm" style={{ maxWidth: '90%' }}>
+              <div className="flex items-center space-x-1.5">
+                <div className="animate-pulse text-xs">Thinking</div>
+                <div className="animate-bounce text-xs">...</div>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <form onSubmit={(e) => handleSendMessage(e)} className="flex gap-2">
+      <form onSubmit={(e) => handleSendMessage(e)} className="flex-shrink-0 flex gap-1.5">
         <input
           type="text"
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           placeholder="Ask about your store data..."
-          className="flex-1 p-2 rounded-lg bg-neutral-800 border border-neutral-700 
-            text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 
+          className="flex-1 p-1.5 text-sm rounded-md bg-neutral-800 border border-neutral-700 
+            text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-1
             focus:ring-blue-500 focus:border-transparent"
         />
         <button 
           type="submit"
           disabled={isLoading || !userInput.trim()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg 
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md 
             disabled:bg-neutral-700 disabled:text-neutral-400 
             hover:bg-blue-700 transition-colors duration-200
-            focus:outline-none focus:ring-2 focus:ring-blue-500"
+            focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
           Send
         </button>
