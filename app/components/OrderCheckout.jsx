@@ -119,23 +119,55 @@ export default function OrderCheckout() {
       }
 
       if (applications > 0) {
-        const rewardItemForPrice = (triggerAndRewardAreTheSame ? triggerItems : rewardItems)[0];
-        if (!rewardItemForPrice) return;
+        // Create a flat array of individual items (expanding quantities)
+        const expandItems = (items) => {
+          const expanded = [];
+          items.forEach(item => {
+            for (let i = 0; i < Number(item.quantity || 0); i++) {
+              expanded.push({ ...item, quantity: 1 });
+            }
+          });
+          return expanded;
+        };
 
-        let savedAmountPerApplication = 0;
-        if (special.discountType === 'free') {
-          savedAmountPerApplication = Number(rewardItemForPrice.price || 0) * Number(special.rewardQuantity || 0);
-        } else if (special.discountType === 'percentage') {
-          const discountValue = Number(special.discountValue || 0);
-          savedAmountPerApplication = Number(rewardItemForPrice.price || 0) * Number(special.rewardQuantity || 0) * (discountValue / 100);
-        } else if (special.discountType === 'fixed') {
-          savedAmountPerApplication = Math.min(Number(rewardItemForPrice.price || 0) * Number(special.rewardQuantity || 0), Number(special.fixedDiscountAmount || 0));
+        const expandedRewardItems = expandItems(triggerAndRewardAreTheSame ? triggerItems : rewardItems);
+        const rewardQuantityPerApp = Number(special.rewardQuantity || 0);
+        
+        // Create individual special instances
+        for (let appIndex = 0; appIndex < applications; appIndex++) {
+          const startIdx = appIndex * rewardQuantityPerApp;
+          const instanceRewardItems = expandedRewardItems.slice(startIdx, startIdx + rewardQuantityPerApp);
+          
+          if (instanceRewardItems.length === 0) continue;
+
+          let instanceSavedAmount = 0;
+          
+          // Calculate discount for each item in this instance
+          instanceRewardItems.forEach(rewardItem => {
+            if (special.discountType === 'free') {
+              instanceSavedAmount += Number(rewardItem.price || 0);
+            } else if (special.discountType === 'percentage') {
+              const discountValue = Number(special.discountValue || 0);
+              instanceSavedAmount += Number(rewardItem.price || 0) * (discountValue / 100);
+            } else if (special.discountType === 'fixed') {
+              // For fixed discount, distribute it evenly across reward items
+              const fixedPerItem = Number(special.fixedDiscountAmount || 0) / rewardQuantityPerApp;
+              instanceSavedAmount += Math.min(Number(rewardItem.price || 0), fixedPerItem);
+            }
+          });
+
+          if (instanceSavedAmount > 0) {
+            newAppliedSpecials.push({ 
+              ...special, 
+              savedAmount: instanceSavedAmount,
+              instanceNumber: applications > 1 ? appIndex + 1 : null,
+              totalInstances: applications > 1 ? applications : null
+            });
+          }
         }
 
-        const totalSavedAmount = savedAmountPerApplication * applications;
-        if (totalSavedAmount > 0) {
-          newAppliedSpecials.push({ ...special, savedAmount: totalSavedAmount });
-          if (isMutuallyExclusive) hasAppliedMutuallyExclusiveSpecial = true;
+        if (isMutuallyExclusive && newAppliedSpecials.length > 0) {
+          hasAppliedMutuallyExclusiveSpecial = true;
         }
       }
     });
@@ -144,7 +176,9 @@ export default function OrderCheckout() {
     const shallowCompare = (a, b) => {
       if (a.length !== b.length) return false;
       for (let i = 0; i < a.length; i++) {
-        if (a[i].id !== b[i].id || a[i].savedAmount !== b[i].savedAmount) return false;
+        if (a[i].id !== b[i].id || 
+            a[i].savedAmount !== b[i].savedAmount ||
+            a[i].instanceNumber !== b[i].instanceNumber) return false;
       }
       return true;
     };
@@ -234,7 +268,14 @@ export default function OrderCheckout() {
           <ul className="mt-2 text-sm text-gray-400">
             {appliedSpecials.map((special, index) => (
               <li key={index} className="flex justify-between items-center py-2 border-b border-neutral-700">
-                <span>{special.name}</span>
+                <span>
+                  {special.name}
+                  {special.instanceNumber && special.totalInstances && (
+                    <span className="text-xs text-neutral-500 ml-1">
+                      (#{special.instanceNumber})
+                    </span>
+                  )}
+                </span>
                 <span className="text-green-500">-R {Number(special.savedAmount).toFixed(2)}</span>
               </li>
             ))}
