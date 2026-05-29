@@ -1,7 +1,7 @@
 import { aggregateProductPaymentTotals } from './pricing/aggregateSales';
 import { getSaleNetTotal } from './pricing/saleAmounts';
 
-/** Net revenue per product (after specials/vouchers). See utils/pricing. */
+/** Gross revenue per product (line subtotals in ZAR). See utils/pricing. */
 export function calculateProductPaymentTotals(salesData) {
     return aggregateProductPaymentTotals(salesData);
 }

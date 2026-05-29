@@ -24,6 +24,8 @@ export {
 export {
   aggregateProductPaymentTotals,
   aggregatePromotionsSummary,
+  aggregateSalesReconciliation,
+  aggregateSpecialsBreakdown,
   sumAggregateProductTotals,
 } from './aggregateSales';
 

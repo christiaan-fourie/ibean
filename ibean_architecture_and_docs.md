@@ -161,7 +161,7 @@ Promotion rules: triggers, rewards, discount types, date range, `mutuallyExclusi
 
 `staffId`, `staffName`, `date`, `storeId`, `items[]`, `appliedSpecials?`, `subtotalBeforeDiscounts`, `totalDiscount`, `total` (net paid), `voucher?`, `payment`.
 
-**Reporting:** `items[].subtotal` remains list price × qty; net revenue uses `sale.total` with pro-rata allocation via `utils/pricing/` (`allocateNetToLineItems`, `aggregateProductPaymentTotals`). New sales are built with `buildSaleDocument()`.
+**Reporting:** Product table = gross line subtotals (ZAR). Net revenue = sum of `sale.total`; promotions from `totalDiscount` / `appliedSpecials` in reconciliation (`utils/pricing/`). New sales: `buildSaleDocument()`.
 
 ### `refunds`
 

@@ -15,6 +15,8 @@ import {
 } from '../../../utils/reportCalculations';
 import {
     aggregatePromotionsSummary,
+    aggregateSalesReconciliation,
+    aggregateSpecialsBreakdown,
     sumAggregateProductTotals,
 } from '../../../utils/pricing';
 import { CHILLZONE_STORES } from '../../../utils/stores';
@@ -72,6 +74,13 @@ export default function Reports() {
         salesWithSpecials: 0,
         transactionCount: 0,
     });
+    const [salesReconciliation, setSalesReconciliation] = useState({
+        gross: 0,
+        promotions: 0,
+        net: 0,
+        transactionCount: 0,
+    });
+    const [specialsBreakdown, setSpecialsBreakdown] = useState([]);
     const [staffTotals, setStaffTotals] = useState([]);
     const [refundTotals, setRefundTotals] = useState([]);
     const [calculatedStats, setCalculatedStats] = useState({
@@ -230,6 +239,8 @@ export default function Reports() {
             const productTotals = calculateProductPaymentTotals(filteredData.sales);
             setSalesTotals(productTotals);
             setPromotionsSummary(aggregatePromotionsSummary(filteredData.sales));
+            setSalesReconciliation(aggregateSalesReconciliation(filteredData.sales));
+            setSpecialsBreakdown(aggregateSpecialsBreakdown(filteredData.sales));
             setRefundTotals(calculateRefundTotals(filteredData.refunds));
             setStaffTotals(calculateStaffTotals(filteredData.sales));
             setCalculatedStats(calculateAdditionalStats(filteredData.sales, filteredData.refunds));
@@ -243,6 +254,8 @@ export default function Reports() {
                 salesWithSpecials: 0,
                 transactionCount: 0,
             });
+            setSalesReconciliation({ gross: 0, promotions: 0, net: 0, transactionCount: 0 });
+            setSpecialsBreakdown([]);
             setRefundTotals([]); setStaffTotals([]);
             setCalculatedStats({ /* initial empty stats */ });
             setVoucherStats({ /* initial empty voucher stats */ });
@@ -431,10 +444,45 @@ export default function Reports() {
                         </View>
                     </View>
 
-                    {/* Sales Report Table — net of specials/vouchers */}
-                    <Text style={styles.sectionHeader}>Sales Report (net revenue)</Text>
+                    <Text style={styles.sectionHeader}>Sales Reconciliation</Text>
+                    <View style={styles.statsContainer}>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statLabel}>Gross (subtotalBeforeDiscounts)</Text>
+                            <Text style={styles.statValue}>R {salesReconciliation.gross.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statLabel}>Promotions (specials + vouchers)</Text>
+                            <Text style={styles.statValue}>-R {salesReconciliation.promotions.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statLabel}>Net (sale.total)</Text>
+                            <Text style={styles.statValue}>R {salesReconciliation.net.toFixed(2)}</Text>
+                        </View>
+                    </View>
+
+                    {specialsBreakdown.length > 0 && (
+                        <>
+                            <Text style={styles.sectionHeader}>Specials Applied</Text>
+                            <View style={styles.table}>
+                                <View style={styles.tableRow}>
+                                    <Text style={styles.tableCellHeader}>Special</Text>
+                                    <Text style={styles.tableCellHeader}>Times</Text>
+                                    <Text style={styles.tableCellHeader}>Total saved</Text>
+                                </View>
+                                {specialsBreakdown.map((row, index) => (
+                                    <View key={row.id} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
+                                        <Text style={styles.tableCell}>{row.name}</Text>
+                                        <Text style={styles.tableCell}>{row.timesApplied}</Text>
+                                        <Text style={styles.highlightCell}>R {row.totalSaved.toFixed(2)}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        </>
+                    )}
+
+                    <Text style={styles.sectionHeader}>Product Sales (gross line subtotals)</Text>
                     <Text style={styles.description}>
-                        Product amounts are after promotions, allocated from each sale total. Promotions in period: R {promotionsSummary.totalPromotions.toFixed(2)} (specials R {promotionsSummary.specialsDiscount.toFixed(2)}, vouchers R {promotionsSummary.voucherDiscount.toFixed(2)}).
+                        Menu-value totals from items sold (ZAR, before promotions). Product table: R {sumAggregateProductTotals(salesTotals).toFixed(2)} · Gross reconciliation: R {salesReconciliation.gross.toFixed(2)} · Net after promotions: R {salesReconciliation.net.toFixed(2)}.
                     </Text>
                     <View style={styles.table}>
                         <View style={styles.tableRow}>
@@ -634,28 +682,48 @@ export default function Reports() {
                                     ({new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()})
                                 </span>
                             </h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 text-neutral-300">
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Total Transactions:</strong> {calculatedStats.totalTransactions}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Total Sales Value:</strong> R{calculatedStats.totalSalesValue.toFixed(2)}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Total Refunds Value:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
-                                {promotionsSummary.totalPromotions > 0 && (
-                                    <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg sm:col-span-2 lg:col-span-3">
-                                        <strong>Promotions (period):</strong>{' '}
-                                        R{promotionsSummary.totalPromotions.toFixed(2)}
-                                        {' '}(specials R{promotionsSummary.specialsDiscount.toFixed(2)}, vouchers R{promotionsSummary.voucherDiscount.toFixed(2)}
-                                        {promotionsSummary.salesWithSpecials > 0 && (
-                                            <> · {promotionsSummary.salesWithSpecials} sale(s) with specials</>
-                                        )}
-                                        )
-                                    </div>
-                                )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 text-neutral-300">
+                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Transactions:</strong> {calculatedStats.totalTransactions}</div>
+                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Gross sales:</strong> R{salesReconciliation.gross.toFixed(2)}</div>
+                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg text-amber-300"><strong>Promotions:</strong> -R{salesReconciliation.promotions.toFixed(2)}</div>
+                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg text-green-400"><strong>Net sales:</strong> R{salesReconciliation.net.toFixed(2)}</div>
+                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg sm:col-span-2"><strong>Refunds:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
+                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg sm:col-span-2 text-xs text-neutral-400">
+                                    Net = sum of <code className="text-neutral-300">sale.total</code>. Product table = gross line subtotals; promotions are listed separately above.
+                                </div>
                             </div>
+
+                            {specialsBreakdown.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-amber-400">Specials applied (period)</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full bg-neutral-800 border border-neutral-700 text-amber-200 text-xs sm:text-sm">
+                                            <thead>
+                                                <tr className="bg-neutral-700">
+                                                    <th className="px-2 sm:px-4 py-2 text-left">Special</th>
+                                                    <th className="px-2 sm:px-4 py-2 text-left">Times</th>
+                                                    <th className="px-2 sm:px-4 py-2 text-left">Total saved</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {specialsBreakdown.map((row) => (
+                                                    <tr key={row.id} className="border-b border-neutral-700">
+                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{row.name}</td>
+                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{row.timesApplied}</td>
+                                                        <td className="px-2 sm:px-4 py-2 font-medium">R{row.totalSaved.toFixed(2)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Table 1: Product Sales */}
                             <div className="mt-6">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-green-500">Product Sales Summary (net)</h3>
+                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-green-500">Product Sales Summary (gross)</h3>
                                 <p className="px-3 pb-2 text-xs text-neutral-400 bg-neutral-900">
-                                    Amounts include specials and voucher discounts (allocated per sale). Product column total: R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
+                                    Line subtotals at menu prices (ZAR). Promotions are in the summary above — net sales R{salesReconciliation.net.toFixed(2)}. Product gross total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
                                 </p>
                                 {Object.keys(salesTotals).length > 0 ? (
                                     <div className="overflow-x-auto">

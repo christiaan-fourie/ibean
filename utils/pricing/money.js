@@ -1,5 +1,6 @@
 /**
- * Money helpers — calculate in rounded decimal rand; use toCents/fromCents when aggregating many lines.
+ * Money helpers — all amounts in South African rand (ZAR) with 2 decimal places.
+ * Firestore stores rand (e.g. 15, 45.50), not cents. toCents/fromCents are optional helpers only.
  */
 
 export function parseMoney(value) {

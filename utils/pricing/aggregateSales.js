@@ -1,5 +1,12 @@
 import { parseMoney, roundMoney } from './money';
-import { allocateNetToLineItems, getSaleSpecialsDiscount, getSaleVoucherDiscount } from './saleAmounts';
+import {
+  getLineGross,
+  getSaleItemsGross,
+  getSaleNetTotal,
+  getSaleSpecialsDiscount,
+  getSaleTotalDiscount,
+  getSaleVoucherDiscount,
+} from './saleAmounts';
 
 function paymentBucket(method) {
   const normalized = (method || 'unknown').toLowerCase();
@@ -10,17 +17,18 @@ function paymentBucket(method) {
 }
 
 /**
- * Net revenue per product, split by payment method (same shape as legacy report table).
+ * Gross revenue per product (sum of items[].subtotal in ZAR — same as Firestore line amounts).
+ * Discounts are not spread across products; see aggregateSalesReconciliation + aggregateSpecialsBreakdown.
  */
 export function aggregateProductPaymentTotals(salesData) {
   const productTotals = {};
 
   for (const sale of salesData || []) {
     const bucket = paymentBucket(sale.payment?.method);
-    const allocations = allocateNetToLineItems(sale);
 
-    for (const line of allocations) {
-      const name = line.name;
+    for (const item of sale.items || []) {
+      const name = item.name || 'Unknown Product';
+      const gross = getLineGross(item);
       if (!productTotals[name]) {
         productTotals[name] = {
           Product: name,
@@ -31,9 +39,8 @@ export function aggregateProductPaymentTotals(salesData) {
           Total: 0,
         };
       }
-      const net = roundMoney(line.net);
-      productTotals[name][bucket] += net;
-      productTotals[name].Total += net;
+      productTotals[name][bucket] += gross;
+      productTotals[name].Total += gross;
     }
   }
 
@@ -49,11 +56,56 @@ export function aggregateProductPaymentTotals(salesData) {
   return productTotals;
 }
 
-/** Sum of product table Total column — should match total net sales for the same sale set. */
+/** Sum of product table Total column — should match reconciliation gross for the same sale set. */
 export function sumAggregateProductTotals(productTotals) {
   return roundMoney(
     Object.values(productTotals || {}).reduce((sum, row) => sum + parseMoney(row.Total), 0)
   );
+}
+
+/** Gross / promotions / net — matches Firestore sale header fields. */
+export function aggregateSalesReconciliation(salesData) {
+  let gross = 0;
+  let promotions = 0;
+  let net = 0;
+
+  for (const sale of salesData || []) {
+    const saleGross =
+      parseMoney(sale?.subtotalBeforeDiscounts) > 0
+        ? parseMoney(sale.subtotalBeforeDiscounts)
+        : getSaleItemsGross(sale);
+    gross += saleGross;
+    promotions += getSaleTotalDiscount(sale);
+    net += getSaleNetTotal(sale);
+  }
+
+  return {
+    gross: roundMoney(gross),
+    promotions: roundMoney(promotions),
+    net: roundMoney(net),
+    transactionCount: (salesData || []).length,
+  };
+}
+
+/** Roll up appliedSpecials from all sales (e.g. "Brownies 4 for 3" × N, R total saved). */
+export function aggregateSpecialsBreakdown(salesData) {
+  const byKey = {};
+
+  for (const sale of salesData || []) {
+    for (const special of sale.appliedSpecials || []) {
+      const name = special.name || special.id || 'Unknown special';
+      const key = special.id || name;
+      if (!byKey[key]) {
+        byKey[key] = { id: key, name, timesApplied: 0, totalSaved: 0 };
+      }
+      byKey[key].timesApplied += 1;
+      byKey[key].totalSaved += parseMoney(special.savedAmount);
+    }
+  }
+
+  return Object.values(byKey)
+    .map((row) => ({ ...row, totalSaved: roundMoney(row.totalSaved) }))
+    .sort((a, b) => b.totalSaved - a.totalSaved);
 }
 
 export function aggregatePromotionsSummary(salesData) {
