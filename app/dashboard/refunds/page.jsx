@@ -5,6 +5,7 @@ import { collection, addDoc, query, orderBy, Timestamp, onSnapshot } from 'fireb
 import db from '../../../utils/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../../../utils/firebase';
+import { getStoreId } from '../../../utils/storeId';
 import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 
 // Toast Notification Component for better UX
@@ -107,7 +108,7 @@ export default function Refunds() {
             return;
         }
         
-        const storeIdentifier = staffAuth.storeId || user?.email; 
+        const storeIdentifier = getStoreId(user) || staffAuth?.storeId; 
         if (!storeIdentifier) {
             setNotification({ message: 'Store identifier could not be determined.', type: 'error' });
             return;

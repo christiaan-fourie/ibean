@@ -5,6 +5,8 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, order
 import { FaEdit, FaTrashAlt, FaCalendarAlt, FaTag, FaStar, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
+import { getAuth } from 'firebase/auth';
+import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -48,14 +50,28 @@ export default function Specials() {
         const authData = localStorage.getItem('staffAuth');
         if (authData) setStaffAuth(JSON.parse(authData));
 
+        const authUser = getAuth().currentUser;
+
         const unsubSpecials = onSnapshot(query(collection(db, 'specials'), orderBy('name')), (snapshot) => {
-            setSpecials(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setSpecials(
+                snapshot.docs
+                    .map((doc) => ({ id: doc.id, ...doc.data() }))
+                    .filter((s) => documentBelongsToStore(s.storeId, authUser))
+            );
         });
         const unsubProducts = onSnapshot(query(collection(db, 'products'), orderBy('name')), (snapshot) => {
-            setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setProducts(
+                snapshot.docs
+                    .map((doc) => ({ id: doc.id, ...doc.data() }))
+                    .filter((p) => documentBelongsToStore(p.storeId, authUser))
+            );
         });
         const unsubCategories = onSnapshot(query(collection(db, 'categories'), orderBy('order')), (snapshot) => {
-            setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setCategories(
+                snapshot.docs
+                    .map((doc) => ({ id: doc.id, ...doc.data() }))
+                    .filter((c) => documentBelongsToStore(c.storeId, authUser))
+            );
         });
 
         return () => {
@@ -121,8 +137,10 @@ export default function Specials() {
         setIsLoading(true);
 
         try {
+            const auth = getAuth();
             const specialData = {
                 ...newSpecial,
+                storeId: getStoreId(auth.currentUser),
                 triggerQuantity: parseInt(newSpecial.triggerQuantity, 10) || 1,
                 rewardQuantity: parseInt(newSpecial.rewardQuantity, 10) || 1,
             };

@@ -1,8 +1,29 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import db from '../../utils/firebase'; // Import Firestore instance
-import { collection, onSnapshot } from 'firebase/firestore'; // Firestore methods
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+
+const ADD_DEBOUNCE_MS = 400;
+
+/** Collapse duplicate line ids (e.g. from rapid double-tap race on localStorage). */
+function normalizeOrderLines(lines) {
+  const byId = new Map();
+  for (const item of lines) {
+    if (!item?.id) continue;
+    const qty = Number(item.quantity) || 1;
+    const existing = byId.get(item.id);
+    if (existing) {
+      existing.quantity += qty;
+    } else {
+      byId.set(item.id, { ...item, quantity: qty });
+    }
+  }
+  return Array.from(byId.values());
+}
+import db from '../../utils/firebase';
+import { auth } from '../../utils/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { documentBelongsToStore } from '../../utils/storeId';
 import { FaSearch, FaCheck, FaShoppingCart } from 'react-icons/fa';
 
 
@@ -25,6 +46,7 @@ const Toast = ({ message, onClose }) => {
 
 const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
   const [selectedVariety, setSelectedVariety] = useState(null);
+  const [isAdding, setIsAdding] = useState(false);
 
   if (!product || !product.varietyPrices) return null;
 
@@ -38,10 +60,10 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
   };
 
   const handleSelect = () => {
-    if (selectedVariety) {
-      onSelectVariety(selectedVariety.name, selectedVariety.price);
-      onClose();
-    }
+    if (!selectedVariety || isAdding) return;
+    setIsAdding(true);
+    onSelectVariety(selectedVariety.name, selectedVariety.price);
+    onClose();
   };
 
   return (
@@ -88,7 +110,7 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
           </button>
           <button
             onClick={handleSelect}
-            disabled={!selectedVariety}
+            disabled={!selectedVariety || isAdding}
             className="flex-1 bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <FaShoppingCart />
@@ -101,6 +123,7 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
 };
 
 const Products = () => {
+  const [user] = useAuthState(auth);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(['All']);
   const [selectedCoffee, setSelectedCoffee] = useState(null); // State for the product needing variety selection
@@ -111,6 +134,7 @@ const Products = () => {
   const [toast, setToast] = useState(null); // State for toast notifications
   const [loading, setLoading] = useState(true); // Loading state
   const [addedProductId, setAddedProductId] = useState(null); // Track recently added product
+  const lastAddAtRef = useRef({});
 
   // Add sort options
   const sortOptions = [
@@ -159,38 +183,46 @@ const Products = () => {
 
   // Add new useEffect for fetching categories
   useEffect(() => {
-    const categoriesCollection = collection(db, 'categories');
-    
-    const unsubscribe = onSnapshot(categoriesCollection, (snapshot) => {
+    if (!user) {
+      setCategories(['All']);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(collection(db, 'categories'), (snapshot) => {
       const categoryList = snapshot.docs
-        .filter(doc => doc.data().active) // Only get active categories
-        .map(doc => doc.data().name)
-        .sort(); // Sort alphabetically
+        .filter((doc) => {
+          const data = doc.data();
+          return data.active && documentBelongsToStore(data.storeId, user);
+        })
+        .map((doc) => doc.data().name)
+        .sort();
 
-      setCategories(['All', ...categoryList]); // Always keep 'All' as first option
+      setCategories(['All', ...categoryList]);
     });
 
     return () => unsubscribe();
-  }, []);
-  
-  // Fetch product list with real-time updates from Firestore
+  }, [user]);
+
   useEffect(() => {
-    // Reference the "products" collection in Firestore
-    const productsCollection = collection(db, 'products');
+    if (!user) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
 
-    // Set up a real-time listener
-    const unsubscribe = onSnapshot(productsCollection, (snapshot) => {
-      const productsList = snapshot.docs.map((doc) => ({
-        id: doc.id, // Use Firestore document ID as the product ID
-        ...doc.data(), // Spread the document data
-      }));
-      setProducts(productsList); // Update the state with the latest data
-      setLoading(false); // Set loading to false after data is fetched
+    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
+      const productsList = snapshot.docs
+        .map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .filter((product) => documentBelongsToStore(product.storeId, user));
+      setProducts(productsList);
+      setLoading(false);
     });
 
-    // Cleanup the listener on component unmount
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
 
 
@@ -202,12 +234,26 @@ const Products = () => {
     return numericPrice.toFixed(2);
   };
 
-  // Unified function to handle adding item (regular or product w/ variety)
-  const addToOrder = (productToAdd) => {
-    const storedOrder = localStorage.getItem('orderDetails');
-    let orderDetails = storedOrder ? JSON.parse(storedOrder) : [];
+  const addToOrder = useCallback((productToAdd) => {
+    const lineId = productToAdd.id;
+    const now = Date.now();
+    if (now - (lastAddAtRef.current[lineId] || 0) < ADD_DEBOUNCE_MS) {
+      return;
+    }
+    lastAddAtRef.current[lineId] = now;
 
-    const existingProductIndex = orderDetails.findIndex((item) => item.id === productToAdd.id);
+    const storedOrder = localStorage.getItem('orderDetails');
+    let orderDetails = [];
+    if (storedOrder) {
+      try {
+        const parsed = JSON.parse(storedOrder);
+        orderDetails = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        orderDetails = [];
+      }
+    }
+
+    const existingProductIndex = orderDetails.findIndex((item) => item.id === lineId);
 
     if (existingProductIndex > -1) {
       orderDetails[existingProductIndex].quantity += 1;
@@ -215,36 +261,32 @@ const Products = () => {
       orderDetails.push({ ...productToAdd, quantity: 1 });
     }
 
+    orderDetails = normalizeOrderLines(orderDetails);
     localStorage.setItem('orderDetails', JSON.stringify(orderDetails));
-
-    // Dispatch a CUSTOM event instead of 'storage'
     window.dispatchEvent(new CustomEvent('order-updated'));
 
-    // Show toast notification
     setToast(`${productToAdd.name} added to order!`);
-    
-    // Visual feedback on the card
-    setAddedProductId(productToAdd.id);
-    setTimeout(() => setAddedProductId(null), 1000);
-  };
+    setAddedProductId(lineId);
+    setTimeout(() => setAddedProductId(null), ADD_DEBOUNCE_MS);
+  }, []);
 
-  // Function called when clicking a product card/button
-  const handleProductClick = (product) => {
-    // Check if it has varietyPrices defined
+  const handleProductClick = useCallback((product) => {
+    if (addedProductId === product.id) return;
+
     if (product.varietyPrices && Object.keys(product.varietyPrices).length > 0) {
-      setSelectedCoffee(product); // Set the product to trigger modal
+      setSelectedCoffee(product);
       setIsSizeModalOpen(true);
-    } else if (product.price !== undefined) { // Handle regular products (ensure price exists)
-      addToOrder({ // Directly add non-variety items
-        id: product.id, // Use original ID
+    } else if (product.price !== undefined) {
+      addToOrder({
+        id: product.id,
         name: product.name,
         price: product.price,
-        category: product.category            
+        category: product.category,
       });
     } else {
       console.warn(`Product "${product.name}" (ID: ${product.id}) is missing price information.`);
     }
-  };
+  }, [addToOrder, addedProductId]);
 
   // Function called when a variety is selected in the modal
   const handleSelectVariety = (varietyName, varietyPrice) => {
@@ -380,8 +422,10 @@ const Products = () => {
               return (
                 <button
                   key={product.id}
+                  type="button"
                   onClick={() => handleProductClick(product)}
-                  className={`relative flex flex-col bg-neutral-800 border rounded-lg p-2.5 transition-all duration-300 hover:shadow-xl hover:scale-105 hover:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                  disabled={isJustAdded}
+                  className={`relative flex flex-col bg-neutral-800 border rounded-lg p-2.5 transition-all duration-300 hover:shadow-xl hover:scale-105 hover:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:pointer-events-none disabled:opacity-80 ${
                     isJustAdded 
                       ? 'border-green-500 bg-green-900/20 scale-105' 
                       : 'border-neutral-700'

@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getFirestore, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc, Timestamp, increment, arrayUnion, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc, increment, arrayUnion, getDoc } from 'firebase/firestore';
 import { auth } from '../../utils/firebase';
+import db from '../../utils/firebase';
+import { buildSaleDocument, parseMoney, roundMoney } from '../../utils/pricing';
+import { getStoreId } from '../../utils/storeId';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) => {
-    const db = getFirestore();
     const [user, loadingUser, errorUser] = useAuthState(auth); // Added loading/error states for user
     const [staffAuth, setStaffAuth] = useState(null);
     const [error, setError] = useState('');
@@ -130,7 +132,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         
         // Check for store-specific vouchers
         if (voucherData.restrictedToStores && voucherData.restrictedToStores.length > 0) {
-            const currentStoreId = staffAuth?.storeId || user?.email;
+            const currentStoreId = getStoreId(user) || staffAuth?.storeId;
             if (!voucherData.restrictedToStores.includes(currentStoreId)) {
                 throw new Error('This voucher cannot be used at this location.');
             }
@@ -264,13 +266,13 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     staffId: staffAuth?.staffId,
                     staffName: staffAuth?.staffName,
                     role: staffAuth?.accountType,
-                    storeId: staffAuth?.storeId || user?.email
+                    storeId: getStoreId(user) || staffAuth?.storeId,
                 },
                 redemptionHistory: arrayUnion({
                     timestamp: new Date().toISOString(),
                     staffId: staffAuth?.staffId,
                     staffName: staffAuth?.staffName,
-                    storeId: staffAuth?.storeId || user?.email
+                    storeId: getStoreId(user) || staffAuth?.storeId,
                 })
             };
 
@@ -356,7 +358,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
 
         // --- Store ID Determination (CRITICAL) ---
         // This ID must match the IDs used in your "Exports" page's store list (e.g., 'zeven@iclick.co.za')
-        const determinedStoreId = staffAuth.storeId || user.email; 
+        const determinedStoreId = getStoreId(user) || staffAuth?.storeId; 
         if (!determinedStoreId) {
             setError("Could not determine Store ID. Sale cannot be processed.");
             setProcessing(false);
@@ -378,57 +380,16 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                 }
             }
 
-            saleDataPayload = {
-                storeId: determinedStoreId,
-                storeName: user.email, // For quick reference, if user.email is descriptive
-                staffId: staffAuth.staffId,
-                staffName: staffAuth.staffName,
-                staffRole: staffAuth.accountType,
-                date: serverTimestamp(), // PRIMARY DATE FIELD for filtering/sorting in reports
-                items: orderDetails.map(item => {
-                    const itemPrice = parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0;
-                    const itemQuantity = parseInt(item.quantity) || 0;
-                    return {
-                        id: item.id,
-                        name: item.name,
-                        size: item.size || null,
-                        quantity: itemQuantity,
-                        price: itemPrice,
-                        subtotal: parseFloat((itemPrice * itemQuantity).toFixed(2)) // Store as number
-                    };
-                }),
-                appliedSpecials: appliedSpecials ? appliedSpecials.map(special => ({
-                    id: special.id || '',
-                    name: special.name || '',
-                    triggerProduct: special.triggerProduct || '',
-                    rewardProduct: special.rewardProduct || '',
-                    discountType: special.discountType || 'free',
-                    discountValue: parseFloat(special.discountValue) || 0,
-                    fixedDiscountAmount: parseFloat(special.fixedDiscountAmount) || 0,
-                    savedAmount: parseFloat(special.savedAmount) || 0,
-                    ...(special.instanceNumber && { instanceNumber: special.instanceNumber }),
-                    ...(special.totalInstances && { totalInstances: special.totalInstances })
-                })) : [],
-                subtotalBeforeDiscounts: parseFloat(orderDetails.reduce((sum, item) =>
-                    sum + ((parseFloat(String(item.price).replace(/[^\d.-]/g, '')) || 0) * (parseInt(item.quantity) || 0)), 0).toFixed(2)),
-                totalDiscount: parseFloat(appliedSpecials ?
-                    appliedSpecials.reduce((sum, special) => sum + (parseFloat(special.savedAmount) || 0), 0).toFixed(2) : "0.00"),
-                total: parseFloat(calculatedTotal), // ALIGNED: This is the sale.total for reports
-                payment: {
-                    method: paymentMethod,
-                    // Extra payment details will be added conditionally below
-                },
-                paymentStatus: 'completed',
-                orderNumber: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`, // Shortened random part
-                source: 'pos_system'
-            };
+            const paymentExtras = {};
 
             if (paymentMethod === 'cash') {
-                const numericCashReceived = parseFloat(cashReceived);
-                const numericTotal = parseFloat(calculatedTotal);
-                saleDataPayload.payment.cashReceived = numericCashReceived;
-                saleDataPayload.payment.change = numericCashReceived - numericTotal;
+                const numericCashReceived = parseMoney(cashReceived);
+                const numericTotal = parseMoney(calculatedTotal);
+                paymentExtras.cashReceived = numericCashReceived;
+                paymentExtras.change = roundMoney(numericCashReceived - numericTotal);
             }
+
+            let voucherPayload = null;
 
             if (paymentMethod === 'voucher') {
                 if (!voucherCode) {
@@ -436,44 +397,57 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     setProcessing(false);
                     return;
                 }
-                
-                // We already have the validated voucher data, no need to fetch it again
-                // Just use validatedVoucher instead of calling validateVoucher again
+
                 if (!validatedVoucher) {
                     setError('Please validate the voucher code first.');
                     setProcessing(false);
                     return;
                 }
-                
-                saleDataPayload.voucher = {
+
+                voucherPayload = {
                     code: voucherCode,
                     id: validatedVoucher.id,
                     voucherType: validatedVoucher.voucherType,
-                    ...(validatedVoucher.discountType !== undefined && { discountType: validatedVoucher.discountType }),
-                    ...(validatedVoucher.discountValue !== undefined && { discountValue: validatedVoucher.discountValue }),
-                    value: parseFloat(totalPrice) - parseFloat(calculatedTotal) // The actual discount value applied
+                    ...(validatedVoucher.discountType !== undefined && {
+                        discountType: validatedVoucher.discountType,
+                    }),
+                    ...(validatedVoucher.discountValue !== undefined && {
+                        discountValue: validatedVoucher.discountValue,
+                    }),
+                    value: parseMoney(totalPrice) - parseMoney(calculatedTotal),
                 };
-                
-                // Mark voucher as used - we'll use our dedicated function for this
+
                 await markVoucherAsRedeemed(validatedVoucher.id);
-                
-                // If voucher has a specific value, it might adjust the total or act as full payment
-                // For simplicity here, assuming voucher covers the total price if used.
-                // Your specific voucher logic might differ (e.g. partial payment).
             }
 
             if (paymentMethod === 'voucher' && showSecondaryPayment) {
-                saleDataPayload.payment.secondaryPayment = {
+                paymentExtras.secondaryPayment = {
                     method: secondaryPaymentMethod,
-                    amount: parseFloat(remainingAmount)
+                    amount: parseMoney(remainingAmount),
                 };
-                
+
                 if (secondaryPaymentMethod === 'cash') {
-                    saleDataPayload.payment.secondaryPayment.cashReceived = parseFloat(cashReceived);
-                    saleDataPayload.payment.secondaryPayment.change = 
-                        parseFloat(cashReceived) - parseFloat(remainingAmount);
+                    const numericCashReceived = parseMoney(cashReceived);
+                    const numericRemaining = parseMoney(remainingAmount);
+                    paymentExtras.secondaryPayment.cashReceived = numericCashReceived;
+                    paymentExtras.secondaryPayment.change = roundMoney(
+                        numericCashReceived - numericRemaining
+                    );
                 }
             }
+
+            saleDataPayload = buildSaleDocument({
+                storeId: determinedStoreId,
+                storeName: user.email,
+                staffAuth,
+                orderDetails,
+                appliedSpecials,
+                netTotal: calculatedTotal,
+                paymentMethod,
+                payment: paymentExtras,
+                voucher: voucherPayload,
+            });
+            saleDataPayload.date = serverTimestamp();
 
             const salesCollectionRef = collection(db, 'sales');
             const docRef = await addDoc(salesCollectionRef, saleDataPayload);

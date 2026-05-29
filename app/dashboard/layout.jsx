@@ -11,7 +11,7 @@ import Login from "../components/Login";
 import { AiFillHome, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload, AiOutlineLogout } from 'react-icons/ai'
 import { FaStoreAlt, FaClock, FaUserCircle } from "react-icons/fa";
 // Create a new StaffAuthModal component
-const StaffAuthModal = ({ onSuccess, onError }) => {
+const StaffAuthModal = ({ storeId, onSuccess, onError }) => {
   const [code, setCode] = useState('');
 
   const handleSubmit = async (e) => {
@@ -28,7 +28,8 @@ const StaffAuthModal = ({ onSuccess, onError }) => {
           timestamp: Date.now(),
           staffId: staffMember.id,
           staffName: staffMember.name,
-          accountType: staffMember.accountType
+          accountType: staffMember.accountType,
+          storeId: storeId || null,
         }));
         onSuccess(staffMember);
       } else {
@@ -175,8 +176,10 @@ export default function RootLayout({ children }) {
           staffId: staff.id,
           staffName: staff.name,
           accountType: staff.accountType,
+          storeId: user?.email || null,
           timestamp: Date.now()
       };
+      localStorage.setItem('staffAuth', JSON.stringify(staffData));
       setStaffAuth(staffData);
       setShowStaffAuth(false);
       setError('');
@@ -206,7 +209,7 @@ export default function RootLayout({ children }) {
     if (showStaffAuth) {
         return (
             <div className="min-h-screen bg-neutral-900">
-                <StaffAuthModal onSuccess={handleStaffSuccess} onError={handleStaffError} />
+                <StaffAuthModal storeId={user?.email} onSuccess={handleStaffSuccess} onError={handleStaffError} />
                 {error && (
                     <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded">
                         {error}

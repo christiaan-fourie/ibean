@@ -1,23 +1,9 @@
+import { aggregateProductPaymentTotals } from './pricing/aggregateSales';
+import { getSaleNetTotal } from './pricing/saleAmounts';
+
+/** Net revenue per product (after specials/vouchers). See utils/pricing. */
 export function calculateProductPaymentTotals(salesData) {
-    const productTotals = {};
-    salesData.forEach(sale => {
-        const paymentMethod = sale.payment?.method?.toLowerCase() || 'unknown';
-        sale.items.forEach(item => {
-            const productName = item.name || 'Unknown Product';
-            const subtotal = parseFloat(item.subtotal) || 0;
-            if (!productTotals[productName]) {
-                productTotals[productName] = { Product: productName, Cash: 0, Card: 0, Snapscan: 0, Other: 0, Total: 0 };
-            }
-            switch (paymentMethod) {
-                case 'cash': productTotals[productName].Cash += subtotal; break;
-                case 'card': productTotals[productName].Card += subtotal; break;
-                case 'snapscan': productTotals[productName].Snapscan += subtotal; break;
-                default: productTotals[productName].Other += subtotal; break;
-            }
-            productTotals[productName].Total += subtotal;
-        });
-    });
-    return productTotals;
+    return aggregateProductPaymentTotals(salesData);
 }
 
 export function calculateRefundTotals(refundData) {
@@ -34,7 +20,7 @@ export function calculateStaffTotals(salesData) {
     const staffPerformance = {};
     salesData.forEach(sale => {
         const staffName = sale.staffName || 'Unknown Staff';
-        const saleTotal = parseFloat(sale.total) || 0;
+        const saleTotal = getSaleNetTotal(sale);
         const itemsInSale = sale.items || [];
 
         if (!staffPerformance[staffName]) {
@@ -194,13 +180,13 @@ export function calculateAdditionalStats(salesData, refundData) {
         distinctSaleHours.add(hour);
 
         const day = saleDate.toLocaleDateString('en-US', { weekday: 'long' });
-        dailySalesValue[day] = (dailySalesValue[day] || 0) + (parseFloat(sale.total) || 0);
+        dailySalesValue[day] = (dailySalesValue[day] || 0) + getSaleNetTotal(sale);
 
         const paymentMethod = sale.payment?.method?.toLowerCase() || 'unknown';
         paymentMethodsCount[paymentMethod] = (paymentMethodsCount[paymentMethod] || 0) + 1;
 
         sale.items.forEach(item => totalItemsSold += (item.quantity || 1));
-        currentTotalSalesValue += (parseFloat(sale.total) || 0);
+        currentTotalSalesValue += getSaleNetTotal(sale);
     });
 
     const peakHourVal = Object.keys(hourlySales).length > 0 ? Object.keys(hourlySales).reduce((a, b) => hourlySales[a] > hourlySales[b] ? a : b) : 'N/A';

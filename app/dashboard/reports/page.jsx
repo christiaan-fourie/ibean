@@ -13,6 +13,11 @@ import {
     calculateVoucherStats,
     calculateAdditionalStats
 } from '../../../utils/reportCalculations';
+import {
+    aggregatePromotionsSummary,
+    sumAggregateProductTotals,
+} from '../../../utils/pricing';
+import { CHILLZONE_STORES } from '../../../utils/stores';
 
 import { pdf, Page, Text, View, Document, StyleSheet } from '@react-pdf/renderer'
 
@@ -57,12 +62,16 @@ export default function Reports() {
         end: new Date().toISOString().split('T')[0],
     });
 
-    const [stores] = useState([
-        { id: 'zeven@iclick.co.za', name: 'Zevenwacht Mall' },
-        { id: 'westgate@iclick.co.za', name: 'Westgate Mall' },
-    ]);
+    const [stores] = useState(CHILLZONE_STORES);
 
     const [salesTotals, setSalesTotals] = useState({});
+    const [promotionsSummary, setPromotionsSummary] = useState({
+        specialsDiscount: 0,
+        voucherDiscount: 0,
+        totalPromotions: 0,
+        salesWithSpecials: 0,
+        transactionCount: 0,
+    });
     const [staffTotals, setStaffTotals] = useState([]);
     const [refundTotals, setRefundTotals] = useState([]);
     const [calculatedStats, setCalculatedStats] = useState({
@@ -218,13 +227,23 @@ export default function Reports() {
     useEffect(() => {
         // setLoading(true) should have been set by the filtering useEffect
         if (filteredData.sales && filteredData.refunds) {
-            setSalesTotals(calculateProductPaymentTotals(filteredData.sales));
+            const productTotals = calculateProductPaymentTotals(filteredData.sales);
+            setSalesTotals(productTotals);
+            setPromotionsSummary(aggregatePromotionsSummary(filteredData.sales));
             setRefundTotals(calculateRefundTotals(filteredData.refunds));
             setStaffTotals(calculateStaffTotals(filteredData.sales));
             setCalculatedStats(calculateAdditionalStats(filteredData.sales, filteredData.refunds));
             setVoucherStats(calculateVoucherStats(filteredData.sales, masterData.vouchers, dateRange, selectedStore));
         } else {
-            setSalesTotals({}); setRefundTotals([]); setStaffTotals([]);
+            setSalesTotals({});
+            setPromotionsSummary({
+                specialsDiscount: 0,
+                voucherDiscount: 0,
+                totalPromotions: 0,
+                salesWithSpecials: 0,
+                transactionCount: 0,
+            });
+            setRefundTotals([]); setStaffTotals([]);
             setCalculatedStats({ /* initial empty stats */ });
             setVoucherStats({ /* initial empty voucher stats */ });
         }
@@ -412,8 +431,11 @@ export default function Reports() {
                         </View>
                     </View>
 
-                    {/* Sales Report Table */}
-                    <Text style={styles.sectionHeader}>Sales Report</Text>
+                    {/* Sales Report Table — net of specials/vouchers */}
+                    <Text style={styles.sectionHeader}>Sales Report (net revenue)</Text>
+                    <Text style={styles.description}>
+                        Product amounts are after promotions, allocated from each sale total. Promotions in period: R {promotionsSummary.totalPromotions.toFixed(2)} (specials R {promotionsSummary.specialsDiscount.toFixed(2)}, vouchers R {promotionsSummary.voucherDiscount.toFixed(2)}).
+                    </Text>
                     <View style={styles.table}>
                         <View style={styles.tableRow}>
                             <Text style={styles.tableCellHeader}>Item</Text>
@@ -616,11 +638,25 @@ export default function Reports() {
                                 <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Total Transactions:</strong> {calculatedStats.totalTransactions}</div>
                                 <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Total Sales Value:</strong> R{calculatedStats.totalSalesValue.toFixed(2)}</div>
                                 <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Total Refunds Value:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
+                                {promotionsSummary.totalPromotions > 0 && (
+                                    <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg sm:col-span-2 lg:col-span-3">
+                                        <strong>Promotions (period):</strong>{' '}
+                                        R{promotionsSummary.totalPromotions.toFixed(2)}
+                                        {' '}(specials R{promotionsSummary.specialsDiscount.toFixed(2)}, vouchers R{promotionsSummary.voucherDiscount.toFixed(2)}
+                                        {promotionsSummary.salesWithSpecials > 0 && (
+                                            <> · {promotionsSummary.salesWithSpecials} sale(s) with specials</>
+                                        )}
+                                        )
+                                    </div>
+                                )}
                             </div>
 
                             {/* Table 1: Product Sales */}
                             <div className="mt-6">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-green-500">Product Sales Summary</h3>
+                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-green-500">Product Sales Summary (net)</h3>
+                                <p className="px-3 pb-2 text-xs text-neutral-400 bg-neutral-900">
+                                    Amounts include specials and voucher discounts (allocated per sale). Product column total: R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
+                                </p>
                                 {Object.keys(salesTotals).length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full bg-neutral-800 border border-neutral-700 text-green-500 text-xs sm:text-sm">

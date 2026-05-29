@@ -65,7 +65,10 @@ ibean/
 │       └── store-account/
 ├── utils/
 │   ├── firebase.js              # Firebase app, auth, Firestore init
-│   └── reportCalculations.js    # Report aggregation helpers
+│   ├── storeId.js               # Canonical store email + legacy uid matching
+│   ├── stores.js                # Chillzone store list for reports
+│   ├── pricing/                 # Order totals, specials, sale builder, net reports
+│   └── reportCalculations.js    # Report helpers (delegates product totals to pricing/)
 ├── .cursorrules                 # AI assistant project rules
 └── .github/instructions/        # Copilot / IDE instructions
 ```
@@ -142,7 +145,7 @@ All collections are queried/written through `@/utils/firebase` (`db` export).
 | `category` | string | Category name |
 | `price` | number? | Single price products |
 | `varietyPrices` | map? | e.g. `{ "Short": 25, "Tall": 30 }` |
-| `storeId` | string | Store Firebase Auth UID |
+| `storeId` | string | Store Firebase Auth **email** (legacy docs may use uid — see `utils/storeId.js`) |
 | `createdBy` / `updatedBy` | map | Audit: `id`, `name`, `role` |
 | `createdAt` / `updatedAt` | timestamp | Server timestamps |
 
@@ -152,11 +155,13 @@ All collections are queried/written through `@/utils/firebase` (`db` export).
 
 ### `specials`
 
-Promotion rules: triggers (product/category/quantity), rewards, discount types, date range, `mutuallyExclusive`, etc.
+Promotion rules: triggers, rewards, discount types, date range, `mutuallyExclusive`, `storeId` (email). Evaluation: `utils/pricing/applySpecials.js`.
 
 ### `sales`
 
-`staffId`, `staffName`, `date`, `total`, `items[]`, `appliedSpecials?`, `voucher?`, `payment`.
+`staffId`, `staffName`, `date`, `storeId`, `items[]`, `appliedSpecials?`, `subtotalBeforeDiscounts`, `totalDiscount`, `total` (net paid), `voucher?`, `payment`.
+
+**Reporting:** `items[].subtotal` remains list price × qty; net revenue uses `sale.total` with pro-rata allocation via `utils/pricing/` (`allocateNetToLineItems`, `aggregateProductPaymentTotals`). New sales are built with `buildSaleDocument()`.
 
 ### `refunds`
 
@@ -281,6 +286,8 @@ flowchart TD
 
 ## Maintenance Notes
 
+- **Active hardening work:** track status in [`TIGHTENING_TRACKER.md`](./TIGHTENING_TRACKER.md) (security, `storeId`, sessions, Firestore rules, domain-layer direction).
+- **Design target:** shared pricing/order logic in `utils/pricing/` (not duplicated in UI); store raw transactional fields; calculate money in cents — see tracker section *Architecture direction*.
 - Keep `.cursorrules`, this file, and `.github/instructions/projectinfo.instructions.md` in sync when architecture or conventions change.
 - Indexed collections: `products`, `categories`, `sales`, `staff`, `vouchers`, `specials`, `refunds`.
 - When adding features not covered here, update this document and ask for clarification on business rules.
