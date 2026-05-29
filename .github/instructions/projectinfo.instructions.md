@@ -5,10 +5,10 @@ Coding standards, domain knowledge, and preferences that AI should follow for th
 
 # Project Information
 - **Project Name**: iBean Point of Sale (POS)
-- **Framework**: Next.js (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **Language**: JavaScript with React
-- **Styling**: Tailwind CSS (Dark Mode)
-- **Backend**: Firebase (Authentication and Firestore Database)
+- **Styling**: Tailwind CSS v4 (Dark Mode)
+- **Backend**: Firebase 12.x (Authentication and Firestore Database)
 - **Deployment**: Vercel
 
 The project is a single Point of Sale (POS) application for use by staff in a coffee shop.
@@ -91,7 +91,7 @@ The data is stored in Firestore with the following collections:
 
 # Additional Notes
 
-If there is anything that is picked up while coding that is not covered by the above, please ask for clarification and suggest update to this file.
+If there is anything that is picked up while coding that is not covered by the above, please ask for clarification and suggest updates to this file and `ibean_architecture_and_docs.md` at the project root.
 
 # Firestore Rules
 ```

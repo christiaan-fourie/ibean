@@ -10,8 +10,6 @@ import { collection, getDocs } from 'firebase/firestore';
 import Login from "../components/Login";
 import { AiFillHome, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload, AiOutlineLogout } from 'react-icons/ai'
 import { FaStoreAlt, FaClock, FaUserCircle } from "react-icons/fa";
-import { BiMenu } from "react-icons/bi";
-
 // Create a new StaffAuthModal component
 const StaffAuthModal = ({ onSuccess, onError }) => {
   const [code, setCode] = useState('');

@@ -1,0 +1,41 @@
+# iBean Project Rules (.cursorrules)
+
+You are an expert developer assistant specialized in Next.js 16, Tailwind CSS v4, and Firebase Firestore. Follow these guidelines for all code edits, debugging tasks, and architectural decisions.
+
+---
+
+## 🛠️ Tech Stack & Standards
+
+*   **Framework**: Next.js 16 (App Router, dynamic routing, React 19 rules).
+*   **Styling**: Tailwind CSS v4. Use standard classes, avoid arbitrary values where possible, and import using `@import "tailwindcss"` in CSS files.
+*   **Database**: Cloud Firestore. Do not use Firebase Realtime Database. Always access the database using the configured instance imported from `@/utils/firebase`.
+*   **Authentication**: Firebase Authentication. Use the `auth` instance from `@/utils/firebase` and handle active sessions securely.
+*   **TypeScript/JS**: Use TypeScript/JavaScript standard patterns suitable for React 19. Ensure proper types are annotated in `.ts`/`.tsx` files or clean JSDoc in `.js`/`.jsx` files.
+
+---
+
+## 📁 Directory Structure & Routing
+
+*   Core pages reside under `app/dashboard/` (e.g., `sales`, `refunds`, `products`, `reports`, etc.).
+*   Reusable components reside under `app/components/` (e.g., `OrderCheckout.jsx`, `ConfirmOrder.jsx`).
+*   Utility files live under `utils/` (e.g., `firebase.js`, `reportCalculations.js`).
+
+---
+
+## 🔑 Security & Authorization Model
+
+*   **Store Access**: Handled at the root landing page via Firebase Auth (`app/page.jsx`).
+*   **Staff Authorization**: Verified via a custom `StaffAuthModal` requiring a 4-digit PIN. 
+*   **Privileges**:
+    *   `staff` -> Access to POS, Sales, Refunds, and Store Account.
+    *   `manager` -> Access to POS, Inventory (Products/Categories/Specials), Staff Management, and Sales Reports.
+*   **Session State**: Stored in `localStorage` as `staffAuth` with a 5-minute expiry timestamp.
+
+---
+
+## 📝 Best Practices
+
+1.  **Strict State Safety**: Do not modify UI states directly; use appropriate hooks.
+2.  **Firebase Security Rules**: Ensure all queries structure conforms to the indexed collections (`products`, `categories`, `sales`, `staff`, `vouchers`, `specials`).
+3.  **Clean Code**: Maintain existing comments and documentations. Write concise, clean React components.
+4.  **Error Handling**: Wrap Firebase network requests in standard `try/catch` blocks with user-friendly console logs and UI alerts.
