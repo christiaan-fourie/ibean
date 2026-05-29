@@ -23,7 +23,6 @@ import db from '../../utils/firebase';
 import { auth } from '../../utils/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { documentBelongsToStore } from '../../utils/storeId';
 import { FaSearch, FaCheck, FaShoppingCart } from 'react-icons/fa';
 
 
@@ -183,17 +182,9 @@ const Products = () => {
 
   // Add new useEffect for fetching categories
   useEffect(() => {
-    if (!user) {
-      setCategories(['All']);
-      return;
-    }
-
     const unsubscribe = onSnapshot(collection(db, 'categories'), (snapshot) => {
       const categoryList = snapshot.docs
-        .filter((doc) => {
-          const data = doc.data();
-          return data.active && documentBelongsToStore(data.storeId, user);
-        })
+        .filter((doc) => doc.data().active)
         .map((doc) => doc.data().name)
         .sort();
 
@@ -201,22 +192,19 @@ const Products = () => {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (!user) {
-      setProducts([]);
-      setLoading(false);
+      setLoading(true);
       return;
     }
 
     const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const productsList = snapshot.docs
-        .map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }))
-        .filter((product) => documentBelongsToStore(product.storeId, user));
+      const productsList = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
       setProducts(productsList);
       setLoading(false);
     });

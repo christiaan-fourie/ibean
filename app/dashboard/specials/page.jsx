@@ -60,18 +60,10 @@ export default function Specials() {
             );
         });
         const unsubProducts = onSnapshot(query(collection(db, 'products'), orderBy('name')), (snapshot) => {
-            setProducts(
-                snapshot.docs
-                    .map((doc) => ({ id: doc.id, ...doc.data() }))
-                    .filter((p) => documentBelongsToStore(p.storeId, authUser))
-            );
+            setProducts(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         });
         const unsubCategories = onSnapshot(query(collection(db, 'categories'), orderBy('order')), (snapshot) => {
-            setCategories(
-                snapshot.docs
-                    .map((doc) => ({ id: doc.id, ...doc.data() }))
-                    .filter((c) => documentBelongsToStore(c.storeId, authUser))
-            );
+            setCategories(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         });
 
         return () => {

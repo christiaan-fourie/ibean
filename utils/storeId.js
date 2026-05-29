@@ -17,7 +17,10 @@ export function getStoreIdCandidates(user) {
   return ids;
 }
 
-/** True if a document belongs to this store (missing storeId = legacy global). */
+/**
+ * True if a store-scoped document belongs to this session (e.g. specials).
+ * Products/categories are chain-wide — do not use this to filter the catalog.
+ */
 export function documentBelongsToStore(docStoreId, user) {
   if (!docStoreId) return true;
   return getStoreIdCandidates(user).includes(docStoreId);

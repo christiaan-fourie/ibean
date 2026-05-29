@@ -5,7 +5,7 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, order
 import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaPlus, FaTools, FaExclamationTriangle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
-import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
+import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 
 // Reusable Toast Notification Component
@@ -122,12 +122,11 @@ export default function Categories() {
         if (authData) setStaffAuth(JSON.parse(authData));
 
         const q = query(collection(db, 'categories'), orderBy('order'));
-        const authUser = getAuth().currentUser;
-
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const categoriesData = snapshot.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .filter((cat) => documentBelongsToStore(cat.storeId, authUser));
+            const categoriesData = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
             setCategories(categoriesData);
         }, (error) => {
             showNotification('Failed to fetch categories.', 'error');

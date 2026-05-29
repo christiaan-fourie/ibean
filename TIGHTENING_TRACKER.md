@@ -312,11 +312,13 @@ flowchart LR
 
 ---
 
-### T-202 — Filter POS catalog by store ✅
+### T-202 — Filter POS catalog by store ✅ (revised)
 
-**Resolution:** `Products.jsx` filters products/categories with `documentBelongsToStore`. `OrderCheckout` applies only store specials via `applySpecialsToOrder`. Manager pages filter lists the same way.
+**Business rule:** **Products and categories are shared across all Chillzone stores** (one chain menu). `storeId` on catalog docs is audit-only (who created), not visibility.
 
-**Notes:** 2026-05-29 — Wave 2.
+**Resolution:** POS and manager UIs load **all** products/categories. Store scoping applies to **sales, refunds, reports, specials** — not the menu.
+
+**Notes:** 2026-05-29 — Wave 2; corrected same day after products hidden by per-store filter.
 
 ---
 

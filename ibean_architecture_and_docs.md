@@ -145,7 +145,7 @@ All collections are queried/written through `@/utils/firebase` (`db` export).
 | `category` | string | Category name |
 | `price` | number? | Single price products |
 | `varietyPrices` | map? | e.g. `{ "Short": 25, "Tall": 30 }` |
-| `storeId` | string | Store Firebase Auth **email** (legacy docs may use uid — see `utils/storeId.js`) |
+| `storeId` | string? | Optional audit: who created it — **catalog is shared across all stores** |
 | `createdBy` / `updatedBy` | map | Audit: `id`, `name`, `role` |
 | `createdAt` / `updatedAt` | timestamp | Server timestamps |
 

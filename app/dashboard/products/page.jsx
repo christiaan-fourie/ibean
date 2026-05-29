@@ -5,7 +5,7 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, order
 import { FaRegCircle, FaCheckCircle, FaTrashAlt, FaEdit, FaExclamationCircle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
-import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
+import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 import { FaTools, FaExclamationTriangle } from 'react-icons/fa';
 
@@ -168,12 +168,11 @@ export default function Products() {
 
         // Real-time listener for products
         const productsQuery = query(collection(db, 'products'), orderBy('name'));
-        const authUser = getAuth().currentUser;
-
         const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
-            const productsData = snapshot.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .filter((p) => documentBelongsToStore(p.storeId, authUser));
+            const productsData = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
             setProducts(productsData);
         }, (error) => {
             showNotification('Failed to fetch products in real-time.', 'error');
@@ -185,9 +184,7 @@ export default function Products() {
         const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
             const categoriesData = snapshot.docs
                 .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .filter(
-                    (cat) => cat.active && documentBelongsToStore(cat.storeId, authUser)
-                );
+                .filter((cat) => cat.active);
             setCategories(categoriesData);
         }, (error) => {
             showNotification('Failed to fetch categories in real-time.', 'error');
