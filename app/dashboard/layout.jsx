@@ -8,6 +8,7 @@ import { auth } from "../../utils/firebase";
 import db from "../../utils/firebase";
 import { collection, getDocs } from 'firebase/firestore';
 import Login from "../components/Login";
+import AppLoadingScreen from "../components/AppLoadingScreen";
 import { DashboardSessionProvider } from "../components/DashboardSessionContext";
 import { AiFillHome, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload, AiOutlineLogout } from 'react-icons/ai'
 import { FaStoreAlt, FaClock, FaUserCircle } from "react-icons/fa";
@@ -207,9 +208,7 @@ export default function RootLayout({ children }) {
     if (loading) {
         return (
             <DashboardSessionProvider value={sessionValue}>
-                <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
-                    Loading...
-                </div>
+                <AppLoadingScreen label="Loading dashboard" />
             </DashboardSessionProvider>
         );
     }

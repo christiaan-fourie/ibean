@@ -2,131 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaRegCircle, FaCheckCircle, FaTrashAlt, FaEdit } from 'react-icons/fa';
+import { FaCheckCircle, FaEdit } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
-import { FaTools, FaExclamationTriangle } from 'react-icons/fa';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
 import { useToastNotification } from '../../hooks/useToastNotification';
 import ToastNotification from '../../components/ToastNotification';
-
-// New Data Auditing Component
-const ProductDataAuditor = ({ products, categories, onStartEdit, showNotification }) => {
-    const [issues, setIssues] = useState([]);
-    const [isScanning, setIsScanning] = useState(false);
-
-    const runAudit = () => {
-        setIsScanning(true);
-        const foundIssues = [];
-
-        products.forEach(product => {
-            const productIssues = [];
-            // 1. Check for invalid price types
-            if (product.price && typeof product.price !== 'number') {
-                productIssues.push({ type: 'INVALID_PRICE_TYPE', message: `Price is a ${typeof product.price}, should be a number.` });
-            }
-            if (product.varietyPrices) {
-                Object.entries(product.varietyPrices).forEach(([variety, price]) => {
-                    if (price && typeof price !== 'number') {
-                        productIssues.push({ type: 'INVALID_VARIETY_PRICE_TYPE', message: `Variety '${variety}' price is a ${typeof price}, should be a number.` });
-                    }
-                });
-            }
-
-            // 2. Check for invalid category
-            if (!categories.some(cat => cat.name === product.category)) {
-                productIssues.push({ type: 'INVALID_CATEGORY', message: `Category '${product.category}' does not exist or is inactive.` });
-            }
-            
-            // 3. Check for missing required fields
-            if (!product.name) productIssues.push({ type: 'MISSING_FIELD', message: "Product is missing a name." });
-            if (!product.category) productIssues.push({ type: 'MISSING_FIELD', message: "Product is missing a category." });
-            if (!product.createdAt) productIssues.push({ type: 'MISSING_FIELD', message: "Product is missing creation date." });
-
-
-            if (productIssues.length > 0) {
-                foundIssues.push({ ...product, issues: productIssues });
-            }
-        });
-
-        setIssues(foundIssues);
-        setIsScanning(false);
-        showNotification(`Audit complete. Found ${foundIssues.length} products with issues.`, 'success');
-    };
-
-    const handleFixIssue = async (product, issue) => {
-        let fixable = true;
-        const updatedData = {};
-
-        switch (issue.type) {
-            case 'INVALID_PRICE_TYPE':
-                updatedData.price = parseFloat(product.price);
-                break;
-            case 'INVALID_VARIETY_PRICE_TYPE':
-                updatedData.varietyPrices = { ...product.varietyPrices };
-                Object.entries(updatedData.varietyPrices).forEach(([variety, price]) => {
-                    if (typeof price !== 'number') {
-                        updatedData.varietyPrices[variety] = parseFloat(price);
-                    }
-                });
-                break;
-            default:
-                fixable = false;
-                showNotification('This issue requires manual correction.', 'error');
-                onStartEdit(product);
-                break;
-        }
-
-        if (fixable) {
-            try {
-                await updateDoc(doc(db, 'products', product.id), updatedData);
-                showNotification(`Successfully fixed ${issue.type} for ${product.name}.`, 'success');
-                // Re-run audit to clear the fixed issue from the list
-                runAudit();
-            } catch (error) {
-                showNotification(`Failed to fix issue: ${error.message}`, 'error');
-                console.error("Failed to fix product data:", error);
-            }
-        }
-    };
-
-    return (
-        <div className="mt-6 p-3 bg-neutral-800 rounded-md border border-neutral-700">
-            <div className="flex justify-between items-center mb-2">
-                <h2 className="text-lg font-bold flex items-center gap-2"><FaTools className="text-sm" /> Data Integrity Audit</h2>
-                <button onClick={runAudit} disabled={isScanning} className="p-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
-                    {isScanning ? 'Scanning...' : 'Scan Products'}
-                </button>
-            </div>
-            <p className="text-neutral-400 mb-2 text-xs">This tool scans for data inconsistencies like incorrect types or missing fields and provides options to fix them.</p>
-            
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {issues.length > 0 ? (
-                    issues.map(product => (
-                        <div key={product.id} className="p-2 bg-neutral-700/50 rounded-md border border-amber-500/50 text-sm">
-                            <h3 className="font-bold text-white text-sm">{product.name}</h3>
-                            <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
-                                {product.issues.map((issue, index) => (
-                                    <li key={index} className="flex justify-between items-center">
-                                        <span className="text-amber-400 flex items-center gap-1.5 text-xs"><FaExclamationTriangle className="text-xs" /> {issue.message}</span>
-                                        <button onClick={() => handleFixIssue(product, issue)} className="px-2 py-0.5 text-[10px] bg-blue-600 hover:bg-blue-700 rounded">
-                                            {['INVALID_CATEGORY', 'MISSING_FIELD'].includes(issue.type) ? 'Edit Manually' : 'Attempt Fix'}
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-neutral-500 text-center py-2 text-xs">No issues found, or no audit has been run yet.</p>
-                )}
-            </div>
-        </div>
-    );
-};
 
 
 export default function Products() {
@@ -142,6 +26,7 @@ export default function Products() {
     });
     const [editingProductId, setEditingProductId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const { notification, notify, clearNotification } = useToastNotification();
     const products = [...productsData].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const categories = [...categoriesData]
@@ -199,6 +84,7 @@ export default function Products() {
         setNewProduct({ name: '', description: '', category: '', price: '', varietyPrices: {} });
         setEditingProductId(null);
         setSelectedCategory(null);
+        setShowDeleteConfirm(false);
     };
 
     const handleStartEdit = (product) => {
@@ -210,10 +96,13 @@ export default function Products() {
     };
 
     const handleDeleteProduct = async (productId) => {
-        if (!confirm('Are you sure you want to delete this product?')) return;
         try {
             await deleteDoc(doc(db, 'products', productId));
             notify('Product deleted successfully.', 'success');
+            if (editingProductId === productId) {
+                resetForm();
+            }
+            setShowDeleteConfirm(false);
         } catch (error) {
             notify('Failed to delete product.', 'error');
             console.error('Error deleting product:', error);
@@ -289,7 +178,7 @@ export default function Products() {
 
     return (
         <RouteGuard requiredRoles={['manager']}>
-            <div className="flex flex-col h-full p-3 bg-neutral-900 text-neutral-50 overflow-y-auto">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/40 p-3 text-neutral-50 md:p-4">
                 {notification.message && (
                     <ToastNotification
                         key={notification.key}
@@ -300,125 +189,186 @@ export default function Products() {
                     />
                 )}
 
-                <h1 className="text-xl font-bold mb-3">Products Management</h1>
-
-                <form onSubmit={handleSubmit} className="mb-4 p-2.5 bg-neutral-800 rounded-md border border-neutral-700 text-sm">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
-                        <input
-                            type="text" name="name" value={newProduct.name} onChange={handleChange}
-                            placeholder="Product Name" className="p-1.5 text-sm bg-neutral-700 rounded" required
-                        />
-                        <div className="flex flex-wrap gap-1.5 p-1.5 bg-neutral-700 rounded items-center text-sm">
-                            {categories.length === 0 ? (
-                                <p className="text-neutral-400">Loading categories...</p>
-                            ) : (
-                                categories.map(category => (
-                                    <button
-                                        key={category.id} type="button" onClick={() => handleCategorySelect(category)}
-                                        className={`p-1.5 rounded transition-colors text-xs ${
-                                            newProduct.category === category.name
-                                                ? 'bg-indigo-600 hover:bg-indigo-700'
-                                                : 'bg-neutral-600 hover:bg-neutral-500'
-                                        }`}
-                                    >
-                                        {category.name}
-                                        {newProduct.category === category.name && <FaCheckCircle className="inline-block ml-2" />}
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                        <textarea
-                            name="description" value={newProduct.description} onChange={handleChange}
-                            placeholder="Description" className="p-1.5 text-sm bg-neutral-700 rounded md:col-span-2"
-                        />
+                <div className="mb-3 flex items-end justify-between gap-3">
+                    <div>
+                        <h1 className="text-2xl font-semibold text-white">Products Management</h1>
+                        <p className="text-sm text-neutral-400">Manage names, categories, and prices from one place.</p>
                     </div>
-
-                    {selectedCategory && (
-                        selectedCategory.varieties?.length > 0 ? (
-                            <div className="mb-2 p-2 bg-neutral-900/50 rounded-md">
-                                <label className="block text-xs font-medium text-neutral-300 mb-1.5">Variety Prices for {selectedCategory.name}</label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    {selectedCategory.varieties.map(variety => (
-                                        <div key={variety} className="flex flex-col gap-1">
-                                            <label className="text-sm text-neutral-400">{variety}</label>
-                                            <input
-                                                type="number" value={newProduct.varietyPrices[variety] || ''}
-                                                onChange={(e) => setNewProduct(prev => ({ ...prev, varietyPrices: { ...prev.varietyPrices, [variety]: e.target.value } }))}
-                                                placeholder={`Price`} step="0.01" min="0"
-                                                className="p-1.5 text-sm bg-neutral-700 rounded w-full" required
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="mb-2 p-2 bg-neutral-900/50 rounded-md">
-                                <label className="block text-xs font-medium text-neutral-300 mb-1.5">Standard Price</label>
-                                <input
-                                    type="number" name="price" value={newProduct.price} onChange={handleChange}
-                                    placeholder="Product Price" step="0.01" min="0"
-                                    className="p-1.5 text-sm bg-neutral-700 rounded w-full max-w-xs" required={!selectedCategory?.varieties?.length}
-                                />
-                            </div>
-                        )
-                    )}
-
-                    <div className="flex gap-2">
-                        <button type="submit" disabled={isLoading} className="flex-grow p-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
-                            {isLoading ? 'Saving...' : (editingProductId ? 'Update Product' : 'Add Product')}
-                        </button>
-                        {editingProductId && (
-                            <button type="button" onClick={resetForm} className="p-1.5 text-sm bg-neutral-600 hover:bg-neutral-500 rounded">
-                                Cancel Edit
-                            </button>
-                        )}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-neutral-300">
+                        {products.length} products
                     </div>
-                </form>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-                    {products.map(product => (
-                        <div key={product.id} className="p-2.5 bg-neutral-800 rounded-md border border-neutral-700 flex flex-col text-sm">
-                            <div className="flex justify-between items-start mb-1.5">
-                                <h3 className="text-base font-bold flex-grow pr-1">{product.name}</h3>
-                                <div className="flex gap-1.5 flex-shrink-0 text-sm">
-                                    <button onClick={() => handleStartEdit(product)} className="text-blue-400 hover:text-blue-300"><FaEdit /></button>
-                                    <button onClick={() => handleDeleteProduct(product.id)} className="text-red-400 hover:text-red-300"><FaTrashAlt /></button>
-                                </div>
-                            </div>
-                            <p className="text-neutral-400 mb-1.5 text-xs flex-grow">{product.description}</p>
-                            {product.varietyPrices && Object.keys(product.varietyPrices).length > 0 ? (
-                                <div className="grid grid-cols-2 gap-1 mt-1.5">
-                                    {Object.entries(product.varietyPrices).map(([variety, price]) => (
-                                        <div key={variety} className="flex justify-between items-center p-1 bg-neutral-700 rounded text-xs">
-                                            <span className="font-medium">{variety}</span>
-                                            <span className="text-indigo-400">R {safeFormatPrice(price)}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : product.price ? (
-                                <div className="p-1.5 bg-neutral-700 rounded mt-1.5">
-                                    <span className="text-indigo-400 text-sm font-bold">R {safeFormatPrice(product.price)}</span>
-                                </div>
-                            ) : (
-                                <p className="text-amber-500 mt-1.5 text-xs">No price set</p>
-                            )}
-                            <div className="mt-2 pt-1.5 border-t border-neutral-700 text-[10px] text-neutral-500">
-                                {product.updatedBy ? (
-                                    <p>Updated by: {product.updatedBy.name} on {safeFormatDate(product.updatedAt)}</p>
-                                ) : (
-                                    <p>Created by: {product.createdBy?.name} on {safeFormatDate(product.createdAt)}</p>
-                                )}
-                            </div>
-                        </div>
-                    ))}
                 </div>
 
-                <ProductDataAuditor 
-                    products={products}
-                    categories={categories}
-                    onStartEdit={handleStartEdit}
-                    showNotification={notify}
-                />
+                <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+                    <section className="min-h-0 rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                        <div className="h-full min-h-0 overflow-y-auto pr-1">
+                            <form onSubmit={handleSubmit} className="mb-4 text-sm">
+                                <div className="mb-4">
+                                    <h2 className="text-base font-semibold text-white">{editingProductId ? 'Edit Product' : 'Add Product'}</h2>
+                                    <p className="text-xs text-neutral-400">Select a category first, then complete the pricing section.</p>
+                                </div>
+
+                                <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-1">
+                                    <input
+                                        type="text" name="name" value={newProduct.name} onChange={handleChange}
+                                        placeholder="Product Name" className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" required
+                                    />
+                                    <input
+                                        type="text" name="description" value={newProduct.description} onChange={handleChange}
+                                        placeholder="Description" className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+                                    />
+                                </div>
+
+                                <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                                    <p className="mb-2 text-xs font-medium text-neutral-300">Category</p>
+                                    <div className="flex flex-wrap gap-2 text-sm">
+                                        {categories.length === 0 ? (
+                                            Array.from({ length: 6 }).map((_, index) => (
+                                                <div key={`category-skeleton-${index}`} className="h-9 w-24 animate-pulse rounded-xl bg-white/10" />
+                                            ))
+                                        ) : (
+                                            categories.map(category => (
+                                                <button
+                                                    key={category.id} type="button" onClick={() => handleCategorySelect(category)}
+                                                    className={`min-h-10 rounded-xl px-3 text-xs font-medium transition-colors ${
+                                                        newProduct.category === category.name
+                                                            ? 'bg-blue-500 text-white'
+                                                            : 'border border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    {category.name}
+                                                    {newProduct.category === category.name && <FaCheckCircle className="ml-2 inline-block" />}
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {selectedCategory && (
+                                    selectedCategory.varieties?.length > 0 ? (
+                                        <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                                            <label className="mb-2 block text-xs font-medium text-neutral-300">Variety Prices for {selectedCategory.name}</label>
+                                            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-2">
+                                                {selectedCategory.varieties.map(variety => (
+                                                    <div key={variety} className="flex flex-col gap-1">
+                                                        <label className="text-sm text-neutral-400">{variety}</label>
+                                                        <input
+                                                            type="number" value={newProduct.varietyPrices[variety] || ''}
+                                                            onChange={(e) => setNewProduct(prev => ({ ...prev, varietyPrices: { ...prev.varietyPrices, [variety]: e.target.value } }))}
+                                                            placeholder={`Price`} step="0.01" min="0"
+                                                            className="w-full rounded-xl border border-white/10 bg-neutral-900/70 p-2 text-sm text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" required
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                                            <label className="mb-2 block text-xs font-medium text-neutral-300">Standard Price</label>
+                                            <input
+                                                type="number" name="price" value={newProduct.price} onChange={handleChange}
+                                                placeholder="Product Price" step="0.01" min="0"
+                                                className="w-full max-w-xs rounded-xl border border-white/10 bg-neutral-900/70 p-2 text-sm text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" required={!selectedCategory?.varieties?.length}
+                                            />
+                                        </div>
+                                    )
+                                )}
+
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="submit" disabled={isLoading} className="min-h-11 flex-grow rounded-2xl bg-blue-500 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-600 disabled:bg-neutral-600">
+                                        {isLoading ? 'Saving...' : (editingProductId ? 'Update Product' : 'Add Product')}
+                                    </button>
+                                    {editingProductId && (
+                                        <button type="button" onClick={resetForm} className="min-h-11 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/15">
+                                            Cancel Edit
+                                        </button>
+                                    )}
+                                    {editingProductId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDeleteConfirm(true)}
+                                            className="min-h-11 rounded-2xl border border-red-400/40 bg-red-500/15 px-4 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/25"
+                                        >
+                                            Delete Product
+                                        </button>
+                                    )}
+                                </div>
+                            </form>
+
+                        </div>
+                    </section>
+
+                    <section className="min-h-0 rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="text-base font-semibold text-white">Product List</h2>
+                            <p className="text-xs text-neutral-400">Tap edit to load into the left pane.</p>
+                        </div>
+                        <div className="grid h-[calc(100%-2.5rem)] min-h-0 grid-cols-1 gap-2.5 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+                            {products.map(product => (
+                                <div key={product.id} className="flex flex-col rounded-2xl border border-white/10 bg-neutral-900/75 p-3 text-sm shadow-lg backdrop-blur-xl">
+                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                        <h3 className="flex-grow pr-1 text-base font-semibold text-white">{product.name}</h3>
+                                        <div className="flex flex-shrink-0 gap-1 text-sm">
+                                            <button onClick={() => handleStartEdit(product)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-blue-300 hover:bg-white/15"><FaEdit /></button>
+                                        </div>
+                                    </div>
+                                    <p className="mb-2 flex-grow text-xs text-neutral-400">{product.description || 'No description'}</p>
+                                    {product.varietyPrices && Object.keys(product.varietyPrices).length > 0 ? (
+                                        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                                            {Object.entries(product.varietyPrices).map(([variety, price]) => (
+                                                <div key={variety} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-1.5 text-xs">
+                                                    <span className="font-medium">{variety}</span>
+                                                    <span className="text-blue-300">R {safeFormatPrice(price)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : product.price ? (
+                                        <div className="mt-1.5 rounded-lg border border-white/10 bg-white/5 p-2">
+                                            <span className="text-sm font-semibold text-blue-300">R {safeFormatPrice(product.price)}</span>
+                                        </div>
+                                    ) : (
+                                        <p className="mt-1.5 text-xs text-amber-400">No price set</p>
+                                    )}
+                                    <div className="mt-3 border-t border-white/10 pt-2 text-[10px] text-neutral-500">
+                                        {product.updatedBy ? (
+                                            <p>Updated by: {product.updatedBy.name} on {safeFormatDate(product.updatedAt)}</p>
+                                        ) : (
+                                            <p>Created by: {product.createdBy?.name} on {safeFormatDate(product.createdAt)}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                </div>
+
+                {showDeleteConfirm && editingProductId && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-neutral-900/95 p-5 shadow-2xl">
+                            <h3 className="text-lg font-semibold text-white">Delete Product?</h3>
+                            <p className="mt-2 text-sm text-neutral-300">
+                                This will permanently remove <span className="font-semibold text-white">{newProduct.name || 'this product'}</span>.
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-400">This action cannot be undone.</p>
+                            <div className="mt-5 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="min-h-11 flex-1 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/15"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDeleteProduct(editingProductId)}
+                                    className="min-h-11 flex-1 rounded-2xl bg-red-500 px-4 text-sm font-semibold text-white hover:bg-red-600"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </RouteGuard>
     );

@@ -1,6 +1,7 @@
 'use client'
 
 import Login from "./components/Login";
+import AppLoadingScreen from "./components/AppLoadingScreen";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
@@ -15,7 +16,7 @@ export default function Home() {
         if (user) {
             router.push('/dashboard');
         }
-    }, [user]);
+    }, [user, router]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -28,11 +29,7 @@ export default function Home() {
     }, []);
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
-                Loading...
-            </div>
-        );
+        return <AppLoadingScreen label="Checking session" />;
     }
 
     return (

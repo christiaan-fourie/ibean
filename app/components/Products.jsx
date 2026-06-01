@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 
 const ADD_DEBOUNCE_MS = 400;
+const PRODUCT_SKELETON_COUNT = 24;
 
 /** Collapse duplicate line ids (e.g. from rapid double-tap race on localStorage). */
 function normalizeOrderLines(lines) {
@@ -323,11 +324,17 @@ const Products = () => {
       {/* Product Grid - Takes up remaining space */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
         {!user || loading ? (
-          <div className="flex items-center justify-center min-h-[300px]">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mb-3"></div>
-              <p className="text-sm text-neutral-400">Loading products...</p>
-            </div>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] gap-2.5">
+            {Array.from({ length: PRODUCT_SKELETON_COUNT }).map((_, index) => (
+              <div
+                key={`product-skeleton-${index}`}
+                className="min-h-24 rounded-xl border border-white/10 bg-neutral-800/70 p-3"
+              >
+                <div className="h-3 w-3/4 rounded bg-neutral-700/90 animate-pulse" />
+                <div className="mt-1.5 h-3 w-1/2 rounded bg-neutral-700/80 animate-pulse" />
+                <div className="mt-5 h-3 w-2/5 rounded bg-neutral-700/70 animate-pulse" />
+              </div>
+            ))}
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="flex items-center justify-center min-h-[300px]">

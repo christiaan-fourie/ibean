@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaTrashAlt, FaEdit, FaPlus, FaTools, FaExclamationTriangle } from 'react-icons/fa';
+import { FaEdit, FaPlus } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
@@ -12,85 +12,6 @@ import { useAuditActor } from '../../hooks/useAuditActor';
 import { useToastNotification } from '../../hooks/useToastNotification';
 import ToastNotification from '../../components/ToastNotification';
 
-// New Data Auditing Component for Categories
-const CategoryDataAuditor = ({ categories, onStartEdit, showNotification }) => {
-    const [issues, setIssues] = useState([]);
-    const [isScanning, setIsScanning] = useState(false);
-
-    const runAudit = () => {
-        setIsScanning(true);
-        const foundIssues = [];
-
-        categories.forEach(category => {
-            const categoryIssues = [];
-            // 1. Check for missing or invalid fields
-            if (!category.name || typeof category.name !== 'string') {
-                categoryIssues.push({ type: 'INVALID_NAME', message: `Category name is missing or not a string.` });
-            }
-            if (typeof category.active !== 'boolean') {
-                categoryIssues.push({ type: 'INVALID_ACTIVE_FLAG', message: `'active' flag is not a boolean.` });
-            }
-            if (!Array.isArray(category.varieties)) {
-                categoryIssues.push({ type: 'INVALID_VARIETIES', message: `'varieties' is not an array.` });
-            }
-            if (typeof category.order !== 'number') {
-                categoryIssues.push({ type: 'INVALID_ORDER', message: `'order' is not a number.` });
-            }
-            if (!category.createdAt) {
-                categoryIssues.push({ type: 'MISSING_CREATED_AT', message: `Category is missing creation date.` });
-            }
-
-            if (categoryIssues.length > 0) {
-                foundIssues.push({ ...category, issues: categoryIssues });
-            }
-        });
-
-        setIssues(foundIssues);
-        setIsScanning(false);
-        showNotification(`Audit complete. Found ${foundIssues.length} categories with issues.`, 'success');
-    };
-
-    const handleFixIssue = (category) => {
-        // Most category issues require manual review
-        showNotification('This issue requires manual correction. Loading category into editor.', 'error');
-        onStartEdit(category);
-    };
-
-    return (
-        <div className="mt-8 p-6 bg-neutral-800 rounded-lg border border-neutral-700">
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold flex items-center gap-3"><FaTools /> Data Integrity Audit</h2>
-                <button onClick={runAudit} disabled={isScanning} className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
-                    {isScanning ? 'Scanning...' : 'Scan Categories'}
-                </button>
-            </div>
-            <p className="text-neutral-400 mb-4 text-sm">This tool scans for data inconsistencies like incorrect types or missing fields.</p>
-            
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                {issues.length > 0 ? (
-                    issues.map(category => (
-                        <div key={category.id} className="p-4 bg-neutral-700/50 rounded-lg border border-amber-500/50">
-                            <h3 className="font-bold text-white">{category.name || 'Category with no name'}</h3>
-                            <ul className="list-disc list-inside mt-2 space-y-2 text-sm">
-                                {category.issues.map((issue, index) => (
-                                    <li key={index} className="flex justify-between items-center">
-                                        <span className="text-amber-400 flex items-center gap-2"><FaExclamationTriangle /> {issue.message}</span>
-                                        <button onClick={() => handleFixIssue(category)} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded">
-                                            Edit Manually
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-neutral-500 text-center py-4">No issues found, or no audit has been run yet.</p>
-                )}
-            </div>
-        </div>
-    );
-};
-
 
 export default function Categories() {
     const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
@@ -99,6 +20,7 @@ export default function Categories() {
     const [varietyInput, setVarietyInput] = useState('');
     const [editingCategoryId, setEditingCategoryId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const { notification, notify, clearNotification } = useToastNotification();
     const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const { hasAuditActor, getAuditActor } = useAuditActor();
@@ -133,6 +55,7 @@ export default function Categories() {
         setNewCategory(initialCategoryState);
         setEditingCategoryId(null);
         setVarietyInput('');
+        setShowDeleteConfirm(false);
     };
 
     const handleStartEdit = (category) => {
@@ -142,10 +65,13 @@ export default function Categories() {
     };
 
     const handleDeleteCategory = async (categoryId) => {
-        if (!confirm('Are you sure you want to delete this category? This cannot be undone.')) return;
         try {
             await deleteDoc(doc(db, 'categories', categoryId));
             notify('Category deleted successfully.', 'success');
+            if (editingCategoryId === categoryId) {
+                resetForm();
+            }
+            setShowDeleteConfirm(false);
         } catch (error) {
             notify('Failed to delete category.', 'error');
             console.error('Error deleting category:', error);
@@ -196,7 +122,7 @@ export default function Categories() {
 
     return (
         <RouteGuard requiredRoles={['manager']}>
-            <div className="flex flex-col min-h-screen p-4 bg-neutral-900 text-neutral-50">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/40 p-3 text-neutral-50 md:p-4">
                 {notification.message && (
                     <ToastNotification
                         key={notification.key}
@@ -206,85 +132,127 @@ export default function Categories() {
                     />
                 )}
 
-                <h1 className="text-3xl font-bold mb-6">Categories Management</h1>
+                <div className="mb-3 flex items-end justify-between gap-3">
+                    <div>
+                        <h1 className="text-2xl font-semibold text-white">Categories Management</h1>
+                        <p className="text-sm text-neutral-400">Manage category labels, ordering defaults, and pricing varieties.</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-neutral-300">
+                        {categories.length} categories
+                    </div>
+                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-1">
-                        <form onSubmit={handleSubmit} className="p-6 bg-neutral-800 rounded-lg border border-neutral-700 space-y-4">
-                            <h2 className="text-xl font-bold">{editingCategoryId ? 'Edit Category' : 'Add New Category'}</h2>
+                <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+                    <section className="min-h-0 rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                        <form onSubmit={handleSubmit} className="h-full min-h-0 space-y-4 overflow-y-auto pr-1 text-sm">
+                            <h2 className="text-base font-semibold text-white">{editingCategoryId ? 'Edit Category' : 'Add New Category'}</h2>
                             <input
                                 type="text" name="name" value={newCategory.name} onChange={handleChange}
-                                placeholder="Category Name" className="w-full p-2 bg-neutral-700 rounded" required
+                                placeholder="Category Name" className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" required
                             />
                             <textarea
                                 name="description" value={newCategory.description} onChange={handleChange}
-                                placeholder="Description" className="w-full p-2 bg-neutral-700 rounded" rows="3"
+                                placeholder="Description" className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" rows="3"
                             />
-                            <div className="flex items-center gap-2">
-                                <input type="checkbox" name="active" id="active" checked={newCategory.active} onChange={handleChange} className="h-4 w-4 rounded bg-neutral-700 text-indigo-600 focus:ring-indigo-500" />
-                                <label htmlFor="active">Active</label>
+                            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                                <input type="checkbox" name="active" id="active" checked={newCategory.active} onChange={handleChange} className="h-4 w-4 rounded border-white/20 bg-neutral-800 text-blue-500 focus:ring-blue-500" />
+                                <label htmlFor="active" className="text-sm text-neutral-300">Active</label>
                             </div>
-                            <div>
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
                                 <label className="block text-sm font-medium text-neutral-300 mb-2">Pricing Varieties (e.g., Small, Large)</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text" value={varietyInput} onChange={(e) => setVarietyInput(e.target.value)}
-                                        placeholder="Add variety..." className="flex-grow p-2 bg-neutral-700 rounded"
+                                        placeholder="Add variety..." className="flex-grow rounded-xl border border-white/10 bg-neutral-900/70 p-2 text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                                     />
-                                    <button type="button" onClick={handleAddVariety} className="p-2 bg-indigo-600 hover:bg-indigo-700 rounded"><FaPlus /></button>
+                                    <button type="button" onClick={handleAddVariety} className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600"><FaPlus /></button>
 
                                 </div>
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                    {newCategory.varieties.map(v => (
-                                        <span key={v} className="flex items-center gap-2 px-2 py-1 bg-neutral-600 rounded-full text-sm">
+                                    {newCategory.varieties.map((v) => (
+                                        <span key={v} className="flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/70 px-2 py-1 text-sm">
                                             {v}
                                             <button type="button" onClick={() => handleRemoveVariety(v)} className="text-red-400 hover:text-red-300">&times;</button>
                                         </span>
                                     ))}
                                 </div>
                             </div>
-                            <div className="flex gap-4 pt-2">
-                                <button type="submit" disabled={isLoading} className="flex-grow p-2 bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600">
+                            <div className="flex flex-wrap gap-2 pt-2">
+                                <button type="submit" disabled={isLoading} className="min-h-11 flex-grow rounded-2xl bg-blue-500 px-4 text-sm font-semibold text-white hover:bg-blue-600 disabled:bg-neutral-600">
                                     {isLoading ? 'Saving...' : (editingCategoryId ? 'Update Category' : 'Add Category')}
                                 </button>
                                 {editingCategoryId && (
-                                    <button type="button" onClick={resetForm} className="p-2 bg-neutral-600 hover:bg-neutral-500 rounded">
+                                    <button type="button" onClick={resetForm} className="min-h-11 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/15">
                                         Cancel
+                                    </button>
+                                )}
+                                {editingCategoryId && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowDeleteConfirm(true)}
+                                        className="min-h-11 rounded-2xl border border-red-400/40 bg-red-500/15 px-4 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/25"
+                                    >
+                                        Delete Category
                                     </button>
                                 )}
                             </div>
                         </form>
-                    </div>
+                    </section>
 
-                    <div className="lg:col-span-2 space-y-3">
+                    <section className="min-h-0 rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="text-base font-semibold text-white">Category List</h2>
+                            <p className="text-xs text-neutral-400">Tap edit to load into the left pane.</p>
+                        </div>
+                        <div className="h-[calc(100%-2.5rem)] min-h-0 space-y-2.5 overflow-y-auto pr-1">
                         {categories.map((category) => (
                             <div
                                 key={category.id}
-                                className={`p-4 rounded-lg flex items-center gap-4 border ${category.active ? 'bg-neutral-800 border-neutral-700' : 'bg-neutral-800/50 border-neutral-700/50'}`}
+                                className={`rounded-2xl border p-4 ${category.active ? 'border-white/10 bg-neutral-900/75' : 'border-white/5 bg-neutral-900/45'}`}
                             >
-                                <div className="flex-grow">
+                                <div className="flex-grow min-w-0">
                                     <h3 className={`text-lg font-bold ${category.active ? 'text-white' : 'text-neutral-500'}`}>{category.name}</h3>
-                                    <p className="text-sm text-neutral-400">{category.description}</p>
+                                    <p className="text-sm text-neutral-400">{category.description || 'No description'}</p>
                                     <div className="flex flex-wrap gap-2 mt-2">
-                                        {category.varieties?.map(v => <span key={v} className="px-2 py-1 bg-neutral-700 rounded-full text-xs">{v}</span>)}
+                                        {category.varieties?.map((v) => <span key={v} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs">{v}</span>)}
                                     </div>
                                 </div>
-                                <div className="flex gap-3">
-                                    <button onClick={() => handleStartEdit(category)} className="text-blue-400 hover:text-blue-300"><FaEdit /></button>
-                                    <button onClick={() => handleDeleteCategory(category.id)} className="text-red-400 hover:text-red-300"><FaTrashAlt /></button>
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleStartEdit(category)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-blue-300 hover:bg-white/15"><FaEdit /></button>
                                 </div>
                             </div>
                         ))}
-                    </div>
+                        </div>
+                    </section>
                 </div>
 
-                <div className="mt-8">
-                    <CategoryDataAuditor
-                        categories={categories}
-                        onStartEdit={handleStartEdit}
-                        showNotification={notify}
-                    />
-                </div>
+                {showDeleteConfirm && editingCategoryId && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-neutral-900/95 p-5 shadow-2xl">
+                            <h3 className="text-lg font-semibold text-white">Delete Category?</h3>
+                            <p className="mt-2 text-sm text-neutral-300">
+                                This will permanently remove <span className="font-semibold text-white">{newCategory.name || 'this category'}</span>.
+                            </p>
+                            <p className="mt-1 text-xs text-neutral-400">This action cannot be undone.</p>
+                            <div className="mt-5 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="min-h-11 flex-1 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/15"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDeleteCategory(editingCategoryId)}
+                                    className="min-h-11 flex-1 rounded-2xl bg-red-500 px-4 text-sm font-semibold text-white hover:bg-red-600"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </RouteGuard>
     );

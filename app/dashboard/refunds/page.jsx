@@ -16,7 +16,6 @@ export default function Refunds() {
     const { hasAuditActor, getAuditActor } = useAuditActor();
     const { data: liveRefunds, isLoading: liveRefundsLoading, error: liveRefundsError } = useCollectionLive('refunds');
     const [loading, setLoading] = useState(false); // For form submission
-    const [pageLoading, setPageLoading] = useState(true); // For initial data load
     const { notification, notify, clearNotification } = useToastNotification();
 
     const initialRefundState = {
@@ -38,7 +37,6 @@ export default function Refunds() {
         if (!isSessionReady) return;
 
         if (!user) {
-            setPageLoading(false);
             notify("Please log in to manage refunds.", 'error');
             return;
         }
@@ -47,8 +45,9 @@ export default function Refunds() {
             console.error('Error fetching refunds:', liveRefundsError);
             notify('Failed to load refunds in real-time.', 'error');
         }
-        setPageLoading(liveRefundsLoading);
-    }, [user, isSessionReady, liveRefundsLoading, liveRefundsError, notify]);
+    }, [user, isSessionReady, liveRefundsError, notify]);
+
+    const pageLoading = isSessionReady && !!user && liveRefundsLoading;
 
     
     // Process refund
@@ -99,21 +98,49 @@ export default function Refunds() {
         setNewRefund(prev => ({ ...prev, [name]: value }));
     };
 
+    const pageSkeleton = (
+        <div className="h-full min-h-0 bg-neutral-900/40 p-3 text-neutral-50 md:p-4">
+            <div className="mx-auto grid h-full min-h-0 max-w-7xl grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                    <div className="mb-4 h-6 w-40 animate-pulse rounded bg-white/15" />
+                    <div className="space-y-3">
+                        <div className="h-12 animate-pulse rounded-2xl bg-white/10" />
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="h-12 animate-pulse rounded-2xl bg-white/10" />
+                            <div className="h-12 animate-pulse rounded-2xl bg-white/10" />
+                        </div>
+                        <div className="h-28 animate-pulse rounded-2xl bg-white/10" />
+                        <div className="h-12 animate-pulse rounded-2xl bg-blue-500/50" />
+                    </div>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                    <div className="mb-4 h-6 w-36 animate-pulse rounded bg-white/15" />
+                    <div className="space-y-2">
+                        {Array.from({ length: 6 }).map((_, index) => (
+                            <div key={`refund-row-skeleton-${index}`} className="h-20 animate-pulse rounded-2xl bg-white/10" />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
     if (!isSessionReady) {
-         return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
+         return pageSkeleton;
     }
 
     if (pageLoading && !user) {
-         return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
+         return pageSkeleton;
     }
 
     return (
-        <div className="min-h-screen bg-neutral-900 p-4 md:p-8 text-white">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto">
+        <div className="h-full min-h-0 bg-neutral-900/40 p-3 text-white md:p-4">
+            <div className="mx-auto grid h-full min-h-0 max-w-7xl grid-cols-1 gap-3 lg:grid-cols-2">
                 
                 {/* Left Column: Form */}
-                <div className="bg-neutral-800 p-6 rounded-lg shadow-lg">
-                    <h2 className="text-2xl font-bold text-white mb-6">Process New Refund</h2>
+                <div className="rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                    <h2 className="mb-1 text-xl font-semibold text-white">Process New Refund</h2>
+                    <p className="mb-5 text-sm text-neutral-400">Capture the item, method, and reason before submitting.</p>
                     <form onSubmit={handleSubmitRefund} className="space-y-5">
                         <div>
                             <label htmlFor="productName" className="block text-sm font-medium text-neutral-300 mb-1">
@@ -125,7 +152,8 @@ export default function Refunds() {
                                 id="productName"
                                 value={newRefund.productName}
                                 onChange={handleInputChange}
-                                className="w-full p-3 bg-neutral-700 rounded-md text-white placeholder-neutral-400 border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                placeholder="e.g. Cappuccino (Large)"
+                                className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white placeholder-neutral-500 transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                                 required
                             />
                         </div>
@@ -143,7 +171,8 @@ export default function Refunds() {
                                     onChange={handleInputChange}
                                     step="0.01"
                                     min="0.01"
-                                    className="w-full p-3 bg-neutral-700 rounded-md text-white placeholder-neutral-400 border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    placeholder="0.00"
+                                    className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white placeholder-neutral-500 transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                                     required
                                 />
                             </div>
@@ -156,7 +185,7 @@ export default function Refunds() {
                                     id="method"
                                     value={newRefund.method}
                                     onChange={handleInputChange}
-                                    className="w-full p-3 bg-neutral-700 rounded-md text-white border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                                     required
                                 >
                                     <option value="cash">Cash</option>
@@ -177,7 +206,8 @@ export default function Refunds() {
                                 id="reason"
                                 value={newRefund.reason}
                                 onChange={handleInputChange}
-                                className="w-full p-3 bg-neutral-700 rounded-md text-white placeholder-neutral-400 border border-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                placeholder="Describe what happened..."
+                                className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white placeholder-neutral-500 transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                                 rows="4"
                                 required
                             />
@@ -186,7 +216,7 @@ export default function Refunds() {
                         <button
                             type="submit"
                             disabled={loading || !staffAuth || !user}
-                            className="w-full p-3 bg-indigo-600 text-white rounded-md font-semibold hover:bg-indigo-700 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
+                            className="min-h-12 w-full rounded-2xl bg-blue-500 p-3 text-base font-semibold text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-neutral-600"
                         >
                             {loading ? 'Processing...' : 'Process Refund'}
                         </button>
@@ -194,18 +224,21 @@ export default function Refunds() {
                 </div>
 
                 {/* Right Column: List */}
-                <div className="bg-neutral-800 p-6 rounded-lg shadow-lg">
-                    <h2 className="text-2xl font-bold text-white mb-6">Recent Refunds</h2>
-                    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                <div className="flex min-h-0 flex-col rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
+                    <h2 className="mb-1 text-xl font-semibold text-white">Recent Refunds</h2>
+                    <p className="mb-4 text-sm text-neutral-400">Newest records appear first.</p>
+                    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                         {pageLoading ? (
-                            <p className="text-neutral-400 text-center py-4">Loading recent refunds...</p>
+                            Array.from({ length: 5 }).map((_, index) => (
+                                <div key={`recent-refund-skeleton-${index}`} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/5" />
+                            ))
                         ) : refunds.length > 0 ? (
                             refunds.map(refund => (
-                                <div key={refund.id} className="p-4 bg-neutral-700/50 rounded-lg border border-neutral-700">
+                                <div key={refund.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                                     <div className="flex justify-between items-start gap-4">
                                         <div className="flex-grow">
-                                            <p className="text-lg font-semibold text-white">{refund.productName}</p>
-                                            <p className="text-sm text-indigo-300 font-medium">
+                                            <p className="text-base font-semibold text-white">{refund.productName}</p>
+                                            <p className="mt-1 text-sm font-medium text-blue-300">
                                                 R {typeof refund.amount === 'number' ? refund.amount.toFixed(2) : refund.amount}
                                             </p>
                                             <p className="mt-2 text-sm text-neutral-300">
@@ -219,7 +252,7 @@ export default function Refunds() {
                                             <p className="capitalize">
                                                 {refund.method?.replace('_', ' ') || 'N/A'}
                                             </p>
-                                            <p>{refund.date ? refund.date.toLocaleDateString() : 'No date'}</p>
+                                            <p>{refund.date ? refund.date.toLocaleDateString('en-ZA') : 'No date'}</p>
                                             <p>{refund.date ? refund.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</p>
                                         </div>
                                     </div>
