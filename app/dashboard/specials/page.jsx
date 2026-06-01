@@ -7,8 +7,8 @@ import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { getAuth } from 'firebase/auth';
 import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
-import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
+import { useToastNotification } from '../../hooks/useToastNotification';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -33,7 +33,6 @@ export default function Specials() {
     const { data: specialsData, error: specialsError } = useCollectionLive('specials');
     const { data: productsData, error: productsError } = useCollectionLive('products');
     const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
-    const { staffAuth } = useDashboardSession();
     const initialSpecialState = {
         name: '', description: '', active: true, mutuallyExclusive: false,
         triggerType: 'product', triggerProduct: '', triggerProductSize: '', triggerCategory: '', triggerCategorySize: '', triggerQuantity: 1,
@@ -43,7 +42,7 @@ export default function Specials() {
     };
     const [newSpecial, setNewSpecial] = useState(initialSpecialState);
     const [editingId, setEditingId] = useState(null);
-    const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
+    const { notification, notify, clearNotification } = useToastNotification();
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('all');
     const authUser = getAuth().currentUser;
@@ -55,22 +54,18 @@ export default function Specials() {
 
     useEffect(() => {
         if (specialsError) {
-            showNotification('Failed to fetch specials.', 'error');
+            notify('Failed to fetch specials.', 'error');
             console.error(specialsError);
         }
         if (productsError) {
-            showNotification('Failed to fetch products.', 'error');
+            notify('Failed to fetch products.', 'error');
             console.error(productsError);
         }
         if (categoriesError) {
-            showNotification('Failed to fetch categories.', 'error');
+            notify('Failed to fetch categories.', 'error');
             console.error(categoriesError);
         }
-    }, [specialsError, productsError, categoriesError]);
-
-    const showNotification = (message, type) => {
-        setNotification({ key: Date.now(), message, type });
-    };
+    }, [specialsError, productsError, categoriesError, notify]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -108,9 +103,9 @@ export default function Specials() {
         if (!confirm('Are you sure you want to delete this special?')) return;
         try {
             await deleteDoc(doc(db, 'specials', specialId));
-            showNotification('Special deleted successfully', 'success');
+            notify('Special deleted successfully', 'success');
         } catch (error) {
-            showNotification('Failed to delete special', 'error');
+            notify('Failed to delete special', 'error');
             console.error('Error deleting special:', error);
         }
     };
@@ -118,7 +113,7 @@ export default function Specials() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!newSpecial.name) {
-            showNotification('Special name is required.', 'error');
+            notify('Special name is required.', 'error');
             return;
         }
         setIsLoading(true);
@@ -145,14 +140,14 @@ export default function Specials() {
 
             if (editingId) {
                 await updateDoc(doc(db, 'specials', editingId), specialData);
-                showNotification('Special updated successfully', 'success');
+                notify('Special updated successfully', 'success');
             } else {
                 await addDoc(collection(db, 'specials'), specialData);
-                showNotification('Special added successfully', 'success');
+                notify('Special added successfully', 'success');
             }
             resetForm();
         } catch (error) {
-            showNotification('Failed to save special: ' + error.message, 'error');
+            notify('Failed to save special: ' + error.message, 'error');
             console.error('Error saving special:', error);
         } finally {
             setIsLoading(false);
@@ -193,7 +188,7 @@ export default function Specials() {
     return (
         <RouteGuard requiredRoles={['manager']}>
             <div className="flex flex-col min-h-screen p-6 bg-neutral-900 text-neutral-50">
-                {notification.message && <Toast key={notification.key} message={notification.message} type={notification.type} onClose={() => setNotification({ message: '', type: '' })} />}
+                {notification.message && <Toast key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
                 <h1 className="text-3xl font-bold mb-6">Specials Management</h1>
 
                 <form onSubmit={handleSubmit} className="mb-8 p-6 bg-neutral-800 rounded-lg shadow-md space-y-6">

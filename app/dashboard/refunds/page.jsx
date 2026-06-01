@@ -8,6 +8,7 @@ import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
+import { useToastNotification } from '../../hooks/useToastNotification';
 
 // Toast Notification Component for better UX
 const Toast = ({ message, type, onClose }) => {
@@ -36,7 +37,7 @@ export default function Refunds() {
     const { data: liveRefunds, isLoading: liveRefundsLoading, error: liveRefundsError } = useCollectionLive('refunds');
     const [loading, setLoading] = useState(false); // For form submission
     const [pageLoading, setPageLoading] = useState(true); // For initial data load
-    const [notification, setNotification] = useState({ message: '', type: '' });
+    const { notification, notify, clearNotification } = useToastNotification();
 
     const initialRefundState = {
         productName: '',
@@ -58,33 +59,33 @@ export default function Refunds() {
 
         if (!user) {
             setPageLoading(false);
-            setNotification({ message: "Please log in to manage refunds.", type: 'error' });
+            notify("Please log in to manage refunds.", 'error');
             return;
         }
 
         if (liveRefundsError) {
             console.error('Error fetching refunds:', liveRefundsError);
-            setNotification({ message: 'Failed to load refunds in real-time.', type: 'error' });
+            notify('Failed to load refunds in real-time.', 'error');
         }
         setPageLoading(liveRefundsLoading);
-    }, [user, isSessionReady, liveRefundsLoading, liveRefundsError]);
+    }, [user, isSessionReady, liveRefundsLoading, liveRefundsError, notify]);
 
     
     // Process refund
     const handleSubmitRefund = async (e) => {
         e.preventDefault();
         if (!newRefund.productName || !newRefund.amount || !newRefund.reason || !newRefund.method) {
-            setNotification({ message: 'Please fill in all required fields.', type: 'error' });
+            notify('Please fill in all required fields.', 'error');
             return;
         }
         if (!hasAuditActor) {
-            setNotification({ message: 'Staff authentication is missing. Cannot process refund.', type: 'error' });
+            notify('Staff authentication is missing. Cannot process refund.', 'error');
             return;
         }
         
         const storeIdentifier = getStoreId(user) || staffAuth?.storeId; 
         if (!storeIdentifier) {
-            setNotification({ message: 'Store identifier could not be determined.', type: 'error' });
+            notify('Store identifier could not be determined.', 'error');
             return;
         }
 
@@ -103,11 +104,11 @@ export default function Refunds() {
 
         try {
             await addDoc(collection(db, 'refunds'), refundDataToSave);
-            setNotification({ message: 'Refund processed successfully!', type: 'success' });
+            notify('Refund processed successfully!', 'success');
             setNewRefund(initialRefundState); // Reset form
         } catch (err) {
             console.error('Error processing refund:', err);
-            setNotification({ message: 'Failed to process refund. ' + err.message, type: 'error' });
+            notify('Failed to process refund. ' + err.message, 'error');
         } finally {
             setLoading(false);
         }
@@ -258,7 +259,7 @@ export default function Refunds() {
                 <Toast 
                     message={notification.message} 
                     type={notification.type} 
-                    onClose={() => setNotification({ message: '', type: '' })} 
+                    onClose={clearNotification} 
                 />
             )}
         </div>

@@ -7,6 +7,7 @@ import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
+import { useToastNotification } from '../../hooks/useToastNotification';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -44,8 +45,8 @@ export default function Vouchers() {
     };
     const [newVoucher, setNewVoucher] = useState(initialVoucherState);
     const [editingId, setEditingId] = useState(null);
-    const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const { notification, notify, clearNotification } = useToastNotification();
     const { hasAuditActor, getAuditActor } = useAuditActor();
     const vouchers = [...vouchersData].sort((a, b) => {
         const at = a?.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
@@ -55,13 +56,9 @@ export default function Vouchers() {
 
     useEffect(() => {
         if (vouchersError) {
-            showNotification('Failed to fetch vouchers.', 'error');
+            notify('Failed to fetch vouchers.', 'error');
         }
-    }, [vouchersError]);
-
-    const showNotification = (message, type) => {
-        setNotification({ key: Date.now(), message, type });
-    };
+    }, [vouchersError, notify]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -94,11 +91,11 @@ export default function Vouchers() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!newVoucher.name || !newVoucher.expirationDate) {
-            showNotification('Voucher Name and Expiration Date are required.', 'error');
+            notify('Voucher Name and Expiration Date are required.', 'error');
             return;
         }
         if (!hasAuditActor) {
-            showNotification('Staff audit identity is missing.', 'error');
+            notify('Staff audit identity is missing.', 'error');
             return;
         }
         setIsLoading(true);
@@ -130,10 +127,10 @@ export default function Vouchers() {
             }
 
             await addDoc(collection(db, 'vouchers'), voucherData);
-            showNotification('Voucher created successfully!', 'success');
+            notify('Voucher created successfully!', 'success');
             resetForm();
         } catch (error) {
-            showNotification('Failed to create voucher: ' + error.message, 'error');
+            notify('Failed to create voucher: ' + error.message, 'error');
             console.error(error);
         } finally {
             setIsLoading(false);
@@ -144,9 +141,9 @@ export default function Vouchers() {
         if (!confirm('Are you sure you want to delete this voucher?')) return;
         try {
             await deleteDoc(doc(db, 'vouchers', voucherId));
-            showNotification('Voucher deleted successfully.', 'success');
+            notify('Voucher deleted successfully.', 'success');
         } catch (error) {
-            showNotification('Failed to delete voucher.', 'error');
+            notify('Failed to delete voucher.', 'error');
             console.error(error);
         }
     };
@@ -169,8 +166,8 @@ export default function Vouchers() {
     const copyToClipboard = (text) => {
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(text)
-                .then(() => showNotification('Voucher code copied!', 'success'))
-                .catch(() => showNotification('Failed to copy code.', 'error'));
+                .then(() => notify('Voucher code copied!', 'success'))
+                .catch(() => notify('Failed to copy code.', 'error'));
         } else {
             // Fallback for older browsers
             try {
@@ -182,9 +179,9 @@ export default function Vouchers() {
                 textarea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textarea);
-                showNotification('Voucher code copied!', 'success');
+                notify('Voucher code copied!', 'success');
             } catch {
-                showNotification('Failed to copy code.', 'error');
+                notify('Failed to copy code.', 'error');
             }
         }
     };
@@ -204,7 +201,7 @@ export default function Vouchers() {
     return (
         <RouteGuard requiredRoles={['manager']}>
             <div className="min-h-screen bg-neutral-900 p-6 text-white">
-                {notification.message && <Toast key={notification.key} message={notification.message} type={notification.type} onClose={() => setNotification({ message: '', type: '' })} />}
+                {notification.message && <Toast key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Form Column */}
                     <div className="lg:col-span-1">

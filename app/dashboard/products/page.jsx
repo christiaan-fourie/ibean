@@ -10,6 +10,7 @@ import RouteGuard from '../../components/RouteGuard';
 import { FaTools, FaExclamationTriangle } from 'react-icons/fa';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
+import { useToastNotification } from '../../hooks/useToastNotification';
 
 
 // Reusable Toast Notification Component
@@ -159,8 +160,8 @@ export default function Products() {
         varietyPrices: {},
     });
     const [editingProductId, setEditingProductId] = useState(null);
-    const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const { notification, notify, clearNotification } = useToastNotification();
     const products = [...productsData].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const categories = [...categoriesData]
         .filter((cat) => cat.active)
@@ -169,18 +170,14 @@ export default function Products() {
 
     useEffect(() => {
         if (productsError) {
-            showNotification('Failed to fetch products in real-time.', 'error');
+            notify('Failed to fetch products in real-time.', 'error');
             console.error(productsError);
         }
         if (categoriesError) {
-            showNotification('Failed to fetch categories in real-time.', 'error');
+            notify('Failed to fetch categories in real-time.', 'error');
             console.error(categoriesError);
         }
-    }, [productsError, categoriesError]);
-
-    const showNotification = (message, type) => {
-        setNotification({ key: Date.now(), message, type });
-    };
+    }, [productsError, categoriesError, notify]);
 
     // New robust date formatting function
     const safeFormatDate = (timestamp) => {
@@ -235,9 +232,9 @@ export default function Products() {
         if (!confirm('Are you sure you want to delete this product?')) return;
         try {
             await deleteDoc(doc(db, 'products', productId));
-            showNotification('Product deleted successfully.', 'success');
+            notify('Product deleted successfully.', 'success');
         } catch (error) {
-            showNotification('Failed to delete product.', 'error');
+            notify('Failed to delete product.', 'error');
             console.error('Error deleting product:', error);
         }
     };
@@ -245,7 +242,7 @@ export default function Products() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!hasAuditActor) {
-            showNotification('Staff audit identity is missing.', 'error');
+            notify('Staff audit identity is missing.', 'error');
             return;
         }
         setIsLoading(true);
@@ -293,16 +290,16 @@ export default function Products() {
                 productData.createdAt = newProduct.createdAt;
                 productData.createdBy = newProduct.createdBy;
                 await updateDoc(doc(db, 'products', editingProductId), productData);
-                showNotification('Product updated successfully.', 'success');
+                notify('Product updated successfully.', 'success');
             } else {
                 productData.createdAt = now;
                 productData.createdBy = getAuditActor();
                 await addDoc(collection(db, 'products'), productData);
-                showNotification('Product added successfully.', 'success');
+                notify('Product added successfully.', 'success');
             }
             resetForm();
         } catch (error) {
-            showNotification('Failed to save product. ' + error.message, 'error');
+            notify('Failed to save product. ' + error.message, 'error');
             console.error('Error saving product:', error);
         } finally {
             setIsLoading(false);
@@ -317,7 +314,7 @@ export default function Products() {
                         key={notification.key}
                         message={notification.message}
                         type={notification.type}
-                        onClose={() => setNotification({ message: '', type: '' })}
+                        onClose={clearNotification}
                     />
                 )}
 
@@ -435,10 +432,10 @@ export default function Products() {
                 </div>
 
                 <ProductDataAuditor 
-                    products={products} 
+                    products={products}
                     categories={categories}
                     onStartEdit={handleStartEdit}
-                    showNotification={showNotification}
+                    showNotification={notify}
                 />
             </div>
         </RouteGuard>

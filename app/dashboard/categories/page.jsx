@@ -9,6 +9,7 @@ import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
+import { useToastNotification } from '../../hooks/useToastNotification';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -115,21 +116,17 @@ export default function Categories() {
     const [newCategory, setNewCategory] = useState(initialCategoryState);
     const [varietyInput, setVarietyInput] = useState('');
     const [editingCategoryId, setEditingCategoryId] = useState(null);
-    const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const { notification, notify, clearNotification } = useToastNotification();
     const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const { hasAuditActor, getAuditActor } = useAuditActor();
 
     useEffect(() => {
         if (categoriesError) {
-            showNotification('Failed to fetch categories.', 'error');
+            notify('Failed to fetch categories.', 'error');
             console.error(categoriesError);
         }
-    }, [categoriesError]);
-
-    const showNotification = (message, type) => {
-        setNotification({ key: Date.now(), message, type });
-    };
+    }, [categoriesError, notify]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -166,9 +163,9 @@ export default function Categories() {
         if (!confirm('Are you sure you want to delete this category? This cannot be undone.')) return;
         try {
             await deleteDoc(doc(db, 'categories', categoryId));
-            showNotification('Category deleted successfully.', 'success');
+            notify('Category deleted successfully.', 'success');
         } catch (error) {
-            showNotification('Failed to delete category.', 'error');
+            notify('Failed to delete category.', 'error');
             console.error('Error deleting category:', error);
         }
     };
@@ -176,11 +173,11 @@ export default function Categories() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!newCategory.name) {
-            showNotification('Category name is required.', 'error');
+            notify('Category name is required.', 'error');
             return;
         }
         if (!hasAuditActor) {
-            showNotification('Staff audit identity is missing.', 'error');
+            notify('Staff audit identity is missing.', 'error');
             return;
         }
         setIsLoading(true);
@@ -198,17 +195,17 @@ export default function Categories() {
             if (editingCategoryId) {
                 categoryData.updatedBy = getAuditActor();
                 await updateDoc(doc(db, 'categories', editingCategoryId), categoryData);
-                showNotification('Category updated successfully.', 'success');
+                notify('Category updated successfully.', 'success');
             } else {
                 categoryData.order = categories.length; // Add to the end
                 categoryData.createdAt = now;
                 categoryData.createdBy = getAuditActor();
                 await addDoc(collection(db, 'categories'), categoryData);
-                showNotification('Category added successfully.', 'success');
+                notify('Category added successfully.', 'success');
             }
             resetForm();
         } catch (error) {
-            showNotification('Failed to save category.', 'error');
+            notify('Failed to save category.', 'error');
             console.error('Error saving category:', error);
         } finally {
             setIsLoading(false);
@@ -223,7 +220,7 @@ export default function Categories() {
                         key={notification.key}
                         message={notification.message}
                         type={notification.type}
-                        onClose={() => setNotification({ message: '', type: '' })}
+                        onClose={clearNotification}
                     />
                 )}
 
@@ -303,7 +300,7 @@ export default function Categories() {
                     <CategoryDataAuditor
                         categories={categories}
                         onStartEdit={handleStartEdit}
-                        showNotification={showNotification}
+                        showNotification={notify}
                     />
                 </div>
             </div>
