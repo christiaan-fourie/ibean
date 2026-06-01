@@ -98,7 +98,7 @@ export default function OrderCheckout() {
   );
 
   return (
-    <div className="flex flex-col p-2.5 bg-neutral-900/70 backdrop-blur-xl shadow-md border-l border-white/10 min-w-full sm:min-w-[260px] sm:max-w-[260px] h-full">
+    <div className="flex flex-col p-2.5 bg-neutral-900/70 backdrop-blur-xl shadow-md border-l border-white/10 min-w-full sm:min-w-[320px] sm:max-w-[360px] h-full">
       <div className="flex-shrink-0">
         <h2 className="text-sm font-semibold text-white mt-2">Order Summary</h2>
         <p className="text-xs text-gray-400">Adjust quantities as needed.</p>
