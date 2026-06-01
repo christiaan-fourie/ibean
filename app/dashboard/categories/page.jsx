@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaPlus, FaTools, FaExclamationTriangle } from 'react-icons/fa';
+import { FaTrashAlt, FaEdit, FaPlus, FaTools, FaExclamationTriangle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
@@ -10,25 +10,7 @@ import RouteGuard from '../../components/RouteGuard';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
 import { useToastNotification } from '../../hooks/useToastNotification';
-
-// Reusable Toast Notification Component
-const Toast = ({ message, type, onClose }) => {
-    useEffect(() => {
-        const timer = setTimeout(onClose, 4000);
-        return () => clearTimeout(timer);
-    }, [onClose]);
-
-    const isSuccess = type === 'success';
-    const bgColor = isSuccess ? 'bg-green-600/30 border-green-500' : 'bg-red-600/30 border-red-500';
-    const icon = isSuccess ? <FaCheckCircle className="text-green-400" /> : <FaExclamationCircle className="text-red-400" />;
-
-    return (
-        <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border ${bgColor} animate-fade-in-up z-50`}>
-            {icon}
-            <span>{message}</span>
-        </div>
-    );
-};
+import ToastNotification from '../../components/ToastNotification';
 
 // New Data Auditing Component for Categories
 const CategoryDataAuditor = ({ categories, onStartEdit, showNotification }) => {
@@ -216,7 +198,7 @@ export default function Categories() {
         <RouteGuard requiredRoles={['manager']}>
             <div className="flex flex-col min-h-screen p-4 bg-neutral-900 text-neutral-50">
                 {notification.message && (
-                    <Toast
+                    <ToastNotification
                         key={notification.key}
                         message={notification.message}
                         type={notification.type}

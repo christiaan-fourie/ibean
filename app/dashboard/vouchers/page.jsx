@@ -2,31 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaGift, FaTag, FaCopy } from 'react-icons/fa';
+import { FaTrashAlt, FaEdit, FaGift, FaTag, FaCopy } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
 import { useToastNotification } from '../../hooks/useToastNotification';
-
-// Reusable Toast Notification Component
-const Toast = ({ message, type, onClose }) => {
-    useEffect(() => {
-        const timer = setTimeout(onClose, 4000);
-        return () => clearTimeout(timer);
-    }, [onClose]);
-
-    const isSuccess = type === 'success';
-    const bgColor = isSuccess ? 'bg-green-600/30 border-green-500' : 'bg-red-600/30 border-red-500';
-    const icon = isSuccess ? <FaCheckCircle className="text-green-400" /> : <FaExclamationCircle className="text-red-400" />;
-
-    return (
-        <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border ${bgColor} animate-fade-in-up z-50`}>
-            {icon}
-            <span>{message}</span>
-        </div>
-    );
-};
+import ToastNotification from '../../components/ToastNotification';
 
 export default function Vouchers() {
     const { data: vouchersData, error: vouchersError } = useCollectionLive('vouchers');
@@ -201,7 +183,7 @@ export default function Vouchers() {
     return (
         <RouteGuard requiredRoles={['manager']}>
             <div className="min-h-screen bg-neutral-900 p-6 text-white">
-                {notification.message && <Toast key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
+                {notification.message && <ToastNotification key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Form Column */}
                     <div className="lg:col-span-1">

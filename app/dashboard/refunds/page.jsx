@@ -4,31 +4,11 @@ import { useState, useEffect } from 'react';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import db from '../../../utils/firebase';
 import { getStoreId } from '../../../utils/storeId';
-import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useAuditActor } from '../../hooks/useAuditActor';
 import { useToastNotification } from '../../hooks/useToastNotification';
-
-// Toast Notification Component for better UX
-const Toast = ({ message, type, onClose }) => {
-    useEffect(() => {
-        const timer = setTimeout(onClose, 5000); // Auto-dismiss after 5 seconds
-        return () => clearTimeout(timer);
-    }, [onClose]);
-
-    const isSuccess = type === 'success';
-    const bgColor = isSuccess ? 'bg-green-600/30 border-green-500' : 'bg-red-600/30 border-red-500';
-    const icon = isSuccess ? <FaCheckCircle className="text-green-400" /> : <FaExclamationCircle className="text-red-400" />;
-
-    return (
-        <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border ${bgColor} animate-fade-in-up`}>
-            {icon}
-            <span>{message}</span>
-            <button onClick={onClose} className="ml-4 text-xl font-light">&times;</button>
-        </div>
-    );
-};
+import ToastNotification from '../../components/ToastNotification';
 
 
 export default function Refunds() {
@@ -256,10 +236,13 @@ export default function Refunds() {
             
             {/* Toast Notification Area */}
             {notification.message && (
-                <Toast 
+                <ToastNotification 
                     message={notification.message} 
                     type={notification.type} 
-                    onClose={clearNotification} 
+                    onClose={clearNotification}
+                    duration={5000}
+                    showCloseButton
+                    containerClassName="fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border animate-fade-in-up"
                 />
             )}
         </div>

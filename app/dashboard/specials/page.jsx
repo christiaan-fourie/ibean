@@ -2,32 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaEdit, FaTrashAlt, FaCalendarAlt, FaTag, FaStar, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+import { FaEdit, FaTrashAlt, FaCalendarAlt, FaTag, FaStar } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { getAuth } from 'firebase/auth';
 import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useToastNotification } from '../../hooks/useToastNotification';
-
-// Reusable Toast Notification Component
-const Toast = ({ message, type, onClose }) => {
-    useEffect(() => {
-        const timer = setTimeout(onClose, 4000);
-        return () => clearTimeout(timer);
-    }, [onClose]);
-
-    const isSuccess = type === 'success';
-    const bgColor = isSuccess ? 'bg-green-600/30 border-green-500' : 'bg-red-600/30 border-red-500';
-    const icon = isSuccess ? <FaCheckCircle className="text-green-400" /> : <FaExclamationCircle className="text-red-400" />;
-
-    return (
-        <div className={`fixed bottom-5 right-5 p-4 rounded-lg shadow-lg flex items-center gap-3 text-white border ${bgColor} animate-fade-in-up z-50`}>
-            {icon}
-            <span>{message}</span>
-        </div>
-    );
-};
+import ToastNotification from '../../components/ToastNotification';
 
 export default function Specials() {
     const { data: specialsData, error: specialsError } = useCollectionLive('specials');
@@ -188,7 +170,7 @@ export default function Specials() {
     return (
         <RouteGuard requiredRoles={['manager']}>
             <div className="flex flex-col min-h-screen p-6 bg-neutral-900 text-neutral-50">
-                {notification.message && <Toast key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
+                {notification.message && <ToastNotification key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
                 <h1 className="text-3xl font-bold mb-6">Specials Management</h1>
 
                 <form onSubmit={handleSubmit} className="mb-8 p-6 bg-neutral-800 rounded-lg shadow-md space-y-6">
