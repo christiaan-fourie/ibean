@@ -1,5 +1,88 @@
 @import "tailwindcss";
 
+:root {
+  --app-bg: #0f1115;
+  --app-bg-elevated: #171a20;
+  --app-surface: rgba(255, 255, 255, 0.06);
+  --app-surface-strong: rgba(255, 255, 255, 0.1);
+  --app-border: rgba(255, 255, 255, 0.12);
+  --app-text: #f3f4f6;
+  --app-muted: #9ca3af;
+  --app-accent: #3b82f6;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  color: var(--app-text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(59, 130, 246, 0.12), transparent 55%),
+    radial-gradient(1000px 600px at 110% 0%, rgba(16, 185, 129, 0.08), transparent 60%),
+    linear-gradient(180deg, #101319 0%, #0b0d11 100%);
+  font-family:
+    "SF Pro Text",
+    "SF Pro Display",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 120ms ease;
+}
+
+input,
+select,
+textarea {
+  border-radius: 12px;
+}
+
+button {
+  border-radius: 12px;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+  background-clip: content-box;
+}
 
 /* Disable text selection
 body {

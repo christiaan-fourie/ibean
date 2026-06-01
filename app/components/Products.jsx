@@ -34,8 +34,8 @@ const Toast = ({ message, onClose }) => {
   }, [onClose]);
 
   return (
-    <div className="fixed top-3 right-3 z-50 animate-slide-in">
-      <div className="bg-green-600 text-white px-4 py-2 rounded-md shadow-lg flex items-center gap-2">
+      <div className="fixed top-3 right-3 z-50 animate-slide-in">
+      <div className="bg-emerald-500/90 backdrop-blur-xl text-white px-4 py-2 rounded-xl border border-white/10 shadow-lg flex items-center gap-2">
         <FaCheck className="text-sm" />
         <span className="text-sm font-medium">{message}</span>
       </div>
@@ -67,7 +67,7 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4 pb-4 animate-fade-in">
-      <div className="bg-neutral-800 border border-neutral-600 rounded-xl shadow-2xl p-6 w-full max-w-md text-white transform transition-all">
+      <div className="bg-neutral-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-md text-white transform transition-all">
         <div className="text-center mb-6">
           <h3 className="text-2xl font-bold mb-2">{product.name}</h3>
           <p className="text-neutral-400 text-sm">Select your size</p>
@@ -82,8 +82,8 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
                 onClick={() => setSelectedVariety({ name: varietyName, price: price })}
                 className={`w-full flex items-center justify-between p-4 rounded-lg cursor-pointer transition-all ${
                   isSelected
-                    ? 'bg-indigo-600 ring-2 ring-indigo-400 shadow-lg scale-105'
-                    : 'bg-neutral-700 hover:bg-neutral-600'
+                    ? 'bg-blue-500 ring-2 ring-blue-300 shadow-lg scale-105'
+                    : 'bg-white/10 hover:bg-white/15 border border-white/10'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -103,14 +103,14 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 bg-neutral-700 text-white py-3 px-4 rounded-lg hover:bg-neutral-600 transition-colors font-medium"
+            className="flex-1 bg-white/10 border border-white/10 text-white py-3 px-4 rounded-xl hover:bg-white/15 transition-colors font-medium"
           >
             Cancel
           </button>
           <button
             onClick={handleSelect}
             disabled={!selectedVariety || isAdding}
-            className="flex-1 bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+            className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <FaShoppingCart />
             Add to Order
@@ -306,13 +306,13 @@ const Products = () => {
       ));
 
   return (
-    <div className="flex flex-col w-full h-full bg-neutral-900"> {/* Use h-full instead of min-h-screen */}
+    <div className="flex flex-col w-full h-full bg-neutral-900/35"> {/* Use h-full instead of min-h-screen */}
 
       {/* Toast Notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
       {/* Category Tabs Section & Sorting */}
-      <div className="flex-shrink-0 bg-neutral-900 border-b border-neutral-800 shadow-lg">
+      <div className="flex-shrink-0 bg-neutral-900/55 backdrop-blur-xl border-b border-white/10 shadow-lg">
         <div className="px-4 py-3 flex justify-between items-center gap-4 flex-wrap">
           {/* Category Tabs */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide">

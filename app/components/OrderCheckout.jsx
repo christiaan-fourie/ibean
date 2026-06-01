@@ -98,12 +98,12 @@ export default function OrderCheckout() {
   );
 
   return (
-    <div className="flex flex-col p-2.5 bg-neutral-800 shadow-md border-l border-neutral-700 min-w-full sm:min-w-[260px] sm:max-w-[260px] h-full">
+    <div className="flex flex-col p-2.5 bg-neutral-900/70 backdrop-blur-xl shadow-md border-l border-white/10 min-w-full sm:min-w-[260px] sm:max-w-[260px] h-full">
       <div className="flex-shrink-0">
         <h2 className="text-sm font-semibold text-white mt-2">Order Summary</h2>
         <p className="text-xs text-gray-400">Adjust quantities as needed.</p>
         {specialsError && (
-          <div className="my-1 p-1.5 bg-red-700 text-white text-[10px] rounded">{specialsError}</div>
+          <div className="my-1 p-1.5 bg-red-600/80 border border-red-300/20 text-white text-[10px] rounded-xl">{specialsError}</div>
         )}
       </div>
 
@@ -118,7 +118,7 @@ export default function OrderCheckout() {
                 <div className="flex items-center gap-1.5 flex-grow min-w-0">
                   <button
                     onClick={() => handleQuantityChange(item.id, -1)}
-                    className="p-0.5 bg-neutral-700 text-white rounded hover:bg-neutral-600 flex-shrink-0 text-xs"
+                    className="p-0.5 bg-white/10 border border-white/10 text-white rounded-lg hover:bg-white/15 flex-shrink-0 text-xs"
                     aria-label={`Decrease quantity of ${item.name}`}
                     title={`Decrease quantity of ${item.name}`}
                   >
@@ -127,7 +127,7 @@ export default function OrderCheckout() {
                   <span className="w-3 text-center flex-shrink-0 text-xs">{item.quantity}</span>
                   <button
                     onClick={() => handleQuantityChange(item.id, 1)}
-                    className="p-0.5 bg-neutral-700 text-white rounded hover:bg-neutral-600 flex-shrink-0 text-xs"
+                    className="p-0.5 bg-white/10 border border-white/10 text-white rounded-lg hover:bg-white/15 flex-shrink-0 text-xs"
                     aria-label={`Increase quantity of ${item.name}`}
                     title={`Increase quantity of ${item.name}`}
                   >
@@ -141,7 +141,7 @@ export default function OrderCheckout() {
                   </div>
                   <button
                     onClick={() => handleDeleteItem(item.id)}
-                    className="p-0.5 bg-red-600 text-white rounded hover:bg-red-500 text-xs"
+                    className="p-0.5 bg-red-500/90 text-white rounded-lg hover:bg-red-500 text-xs"
                     aria-label={`Remove ${item.name} from order`}
                     title={`Remove ${item.name} from order`}
                   >
@@ -206,7 +206,7 @@ export default function OrderCheckout() {
             <span>R {totals.total.toFixed(2)}</span>
           </div>
           <button
-            className="mt-2 w-full bg-indigo-600 text-white py-1.5 text-sm rounded-md hover:bg-indigo-700 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
+            className="mt-2 w-full bg-blue-500 text-white py-1.5 text-sm rounded-xl hover:bg-blue-600 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
             onClick={() => setShowConfirmation(true)}
             disabled={orderDetails.length === 0}
           >
