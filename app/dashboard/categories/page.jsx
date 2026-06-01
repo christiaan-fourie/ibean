@@ -7,6 +7,7 @@ import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -109,7 +110,7 @@ const CategoryDataAuditor = ({ categories, onStartEdit, showNotification }) => {
 
 export default function Categories() {
     const [categories, setCategories] = useState([]);
-    const [staffAuth, setStaffAuth] = useState(null);
+    const { staffAuth } = useDashboardSession();
     const initialCategoryState = { name: '', description: '', active: true, varieties: [], order: 0 };
     const [newCategory, setNewCategory] = useState(initialCategoryState);
     const [varietyInput, setVarietyInput] = useState('');
@@ -118,9 +119,6 @@ export default function Categories() {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        const authData = localStorage.getItem('staffAuth');
-        if (authData) setStaffAuth(JSON.parse(authData));
-
         const q = query(collection(db, 'categories'), orderBy('order'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const categoriesData = snapshot.docs.map((doc) => ({

@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, addDoc, query, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
 import db from '../../../utils/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../../../utils/firebase';
 import { getStoreId } from '../../../utils/storeId';
 import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 
 // Toast Notification Component for better UX
 const Toast = ({ message, type, onClose }) => {
@@ -30,9 +29,8 @@ const Toast = ({ message, type, onClose }) => {
 
 
 export default function Refunds() {
-    const [user, loadingAuth, errorAuth] = useAuthState(auth);
+    const { user, staffAuth, isSessionReady } = useDashboardSession();
     const [refunds, setRefunds] = useState([]);
-    const [staffAuth, setStaffAuth] = useState(null);
     const [loading, setLoading] = useState(false); // For form submission
     const [pageLoading, setPageLoading] = useState(true); // For initial data load
     const [notification, setNotification] = useState({ message: '', type: '' });
@@ -45,28 +43,13 @@ export default function Refunds() {
     };
     const [newRefund, setNewRefund] = useState(initialRefundState);
 
-    // Get staff authentication from localStorage
-    useEffect(() => {
-        const authData = localStorage.getItem('staffAuth');
-        if (authData) {
-            try {
-                setStaffAuth(JSON.parse(authData));
-            } catch (e) {
-                console.error("Failed to parse staffAuth:", e);
-                setNotification({ message: "Error loading staff authentication.", type: 'error' });
-            }
-        } else if (!loadingAuth) {
-            setNotification({ message: "Staff authentication not found. Please log in.", type: 'error' });
-        }
-    }, [loadingAuth]);
-
     // Fetch existing refunds in REAL-TIME
     useEffect(() => {
+        if (!isSessionReady) return;
+
         if (!user) {
-            if (!loadingAuth) {
-                setPageLoading(false);
-                setNotification({ message: "Please log in to manage refunds.", type: 'error' });
-            }
+            setPageLoading(false);
+            setNotification({ message: "Please log in to manage refunds.", type: 'error' });
             return;
         }
 
@@ -93,7 +76,7 @@ export default function Refunds() {
         // Cleanup subscription on unmount
         return () => unsubscribe();
 
-    }, [user, loadingAuth]);
+    }, [user, isSessionReady]);
 
     
     // Process refund
@@ -148,7 +131,11 @@ export default function Refunds() {
         setNewRefund(prev => ({ ...prev, [name]: value }));
     };
 
-    if (pageLoading && !user && !errorAuth) {
+    if (!isSessionReady) {
+         return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
+    }
+
+    if (pageLoading && !user) {
          return <div className="min-h-screen bg-neutral-900 p-8 text-white text-center">Loading authentication...</div>;
     }
 

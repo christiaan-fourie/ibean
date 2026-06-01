@@ -8,6 +8,7 @@ import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 import { FaTools, FaExclamationTriangle } from 'react-icons/fa';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 
 
 // Reusable Toast Notification Component
@@ -149,7 +150,7 @@ export default function Products() {
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [selectedCategory, setSelectedCategory] = useState(null);
-    const [staffAuth, setStaffAuth] = useState(null);
+    const { staffAuth } = useDashboardSession();
     const [newProduct, setNewProduct] = useState({
         name: '',
         description: '',
@@ -163,9 +164,6 @@ export default function Products() {
 
     // Real-time data fetching and initial setup
     useEffect(() => {
-        const authData = localStorage.getItem('staffAuth');
-        if (authData) setStaffAuth(JSON.parse(authData));
-
         // Real-time listener for products
         const productsQuery = query(collection(db, 'products'), orderBy('name'));
         const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {

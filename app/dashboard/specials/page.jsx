@@ -7,6 +7,7 @@ import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { getAuth } from 'firebase/auth';
 import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -31,7 +32,7 @@ export default function Specials() {
     const [specials, setSpecials] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [staffAuth, setStaffAuth] = useState(null);
+    const { staffAuth } = useDashboardSession();
     const initialSpecialState = {
         name: '', description: '', active: true, mutuallyExclusive: false,
         triggerType: 'product', triggerProduct: '', triggerProductSize: '', triggerCategory: '', triggerCategorySize: '', triggerQuantity: 1,
@@ -47,9 +48,6 @@ export default function Specials() {
 
     // Real-time data fetching
     useEffect(() => {
-        const authData = localStorage.getItem('staffAuth');
-        if (authData) setStaffAuth(JSON.parse(authData));
-
         const authUser = getAuth().currentUser;
 
         const unsubSpecials = onSnapshot(query(collection(db, 'specials'), orderBy('name')), (snapshot) => {

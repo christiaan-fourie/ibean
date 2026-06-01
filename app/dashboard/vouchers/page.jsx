@@ -5,6 +5,7 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, order
 import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaGift, FaTag, FaCopy } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -29,7 +30,7 @@ export default function Vouchers() {
     const [vouchers, setVouchers] = useState([]);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [staffAuth, setStaffAuth] = useState(null);
+    const { staffAuth } = useDashboardSession();
     const initialVoucherState = {
         name: '', code: '', active: true, redeemed: false,
         voucherType: 'discount', // discount, freeItem, giftCard
@@ -47,9 +48,6 @@ export default function Vouchers() {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        const authData = localStorage.getItem('staffAuth');
-        if (authData) setStaffAuth(JSON.parse(authData));
-
         const unsubVouchers = onSnapshot(query(collection(db, 'vouchers'), orderBy('createdAt', 'desc')), (snap) => {
             setVouchers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });

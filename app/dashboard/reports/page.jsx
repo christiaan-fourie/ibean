@@ -3,9 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore'; 
 import db from '../../../utils/firebase'; 
-import { auth } from '../../../utils/firebase'; 
-import { useAuthState } from 'react-firebase-hooks/auth';
 import RouteGuard from '../../components/RouteGuard';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 import {
     calculateProductPaymentTotals,
     calculateRefundTotals,
@@ -39,8 +38,7 @@ const getEndOfDayFromString = (dateString) => {
 
 
 export default function Reports() {
-    const [user, loadingAuth, errorAuth] = useAuthState(auth);
-    const [staffAuth, setStaffAuth] = useState(null);
+    const { user, staffAuth, isSessionReady } = useDashboardSession();
 
     // State to hold ALL data fetched from Firestore (unfiltered)
     const [masterData, setMasterData] = useState({
@@ -103,17 +101,6 @@ export default function Reports() {
     const [liveUpdate, setLiveUpdate] = useState(false);
     const prevMasterDataRef = useRef(masterData);
 
-    useEffect(() => {
-        const storedAuth = localStorage.getItem('staffAuth');
-        if (storedAuth) {
-            try {
-                setStaffAuth(JSON.parse(storedAuth));
-            } catch (e) {
-                console.error("Failed to parse staffAuth from localStorage", e);
-            }
-        }
-    }, []);
-
     // NEW: Automatically set the store for staff members
     useEffect(() => {
         if (staffAuth?.accountType === 'staff' && user?.email) {
@@ -124,13 +111,11 @@ export default function Reports() {
 
     // Replace fetchAllMasterData with a real-time listener
     useEffect(() => {
-        if (!user && !loadingAuth) {
+        if (!isSessionReady) return;
+
+        if (!user) {
             setError("Please log in to view reports.");
             setMasterData({ sales: [], products: [], specials: [], staff: [], vouchers: [], refunds: [] });
-            return;
-        }
-        if (errorAuth) {
-            setError(`Authentication error: ${errorAuth.message}`);
             return;
         }
 
@@ -169,7 +154,7 @@ export default function Reports() {
         return () => {
             unsubscribes.forEach(unsub => unsub());
         };
-    }, [user, loadingAuth, errorAuth]);
+    }, [user, isSessionReady]);
 
     // Effect to filter masterData when it, selectedStore, or dateRange changes
     useEffect(() => {
@@ -617,7 +602,7 @@ export default function Reports() {
     }, [masterData]);
 
     return (
-        <RouteGuard requiredRoles={['manager', 'staff']} currentRole={staffAuth?.accountType}>
+        <RouteGuard requiredRoles={['manager', 'staff']}>
             <div className="min-h-screen bg-neutral-900 p-4 md:p-8">
                 <div className="">
 

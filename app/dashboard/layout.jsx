@@ -8,6 +8,7 @@ import { auth } from "../../utils/firebase";
 import db from "../../utils/firebase";
 import { collection, getDocs } from 'firebase/firestore';
 import Login from "../components/Login";
+import { DashboardSessionProvider } from "../components/DashboardSessionContext";
 import { AiFillHome, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload, AiOutlineLogout } from 'react-icons/ai'
 import { FaStoreAlt, FaClock, FaUserCircle } from "react-icons/fa";
 // Create a new StaffAuthModal component
@@ -196,30 +197,48 @@ export default function RootLayout({ children }) {
         setShowStaffAuth(true);
     };
 
+    const sessionValue = {
+        user,
+        staffAuth,
+        isSessionReady: !loading && !!user && !showStaffAuth,
+        endShift: handleEndShift
+    };
+
     if (loading) {
-        return <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
-            Loading...
-        </div>;
+        return (
+            <DashboardSessionProvider value={sessionValue}>
+                <div className="flex items-center justify-center min-h-screen bg-neutral-900 text-neutral-100">
+                    Loading...
+                </div>
+            </DashboardSessionProvider>
+        );
     }
 
     if (!user) {
-        return <Login />;
+        return (
+            <DashboardSessionProvider value={sessionValue}>
+                <Login />
+            </DashboardSessionProvider>
+        );
     }
 
     if (showStaffAuth) {
         return (
-            <div className="min-h-screen bg-neutral-900">
-                <StaffAuthModal storeId={user?.email} onSuccess={handleStaffSuccess} onError={handleStaffError} />
-                {error && (
-                    <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded">
-                        {error}
-                    </div>
-                )}
-            </div>
+            <DashboardSessionProvider value={sessionValue}>
+                <div className="min-h-screen bg-neutral-900">
+                    <StaffAuthModal storeId={user?.email} onSuccess={handleStaffSuccess} onError={handleStaffError} />
+                    {error && (
+                        <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded">
+                            {error}
+                        </div>
+                    )}
+                </div>
+            </DashboardSessionProvider>
         );
     }
 
     return (
+        <DashboardSessionProvider value={sessionValue}>
         <div className="flex h-screen bg-neutral-900">
             {/* Compact Icon Sidebar */}
             <aside className="bg-neutral-800 border-r border-neutral-700 flex flex-col w-16 shadow-lg z-10">
@@ -313,5 +332,6 @@ export default function RootLayout({ children }) {
                 </main>
             </div>
         </div>
+        </DashboardSessionProvider>
     );
 }

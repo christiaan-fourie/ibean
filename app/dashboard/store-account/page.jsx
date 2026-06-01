@@ -1,20 +1,14 @@
 'use client';
 
 import { auth } from '../../../utils/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { useState, useEffect } from 'react';
+import { signOut } from 'firebase/auth';
+import { useState } from 'react';
 import RouteGuard from '../../components/RouteGuard';
+import { useDashboardSession } from '../../components/DashboardSessionContext';
 
 const UserAccount = () => {
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-    const [user, setUser] = useState(null);
-
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-        });
-        return () => unsubscribe();
-    }, []);
+    const { user } = useDashboardSession();
 
     const handleLogout = async () => {
         try {
