@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, addDoc, query, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import db from '../../../utils/firebase';
 import { getStoreId } from '../../../utils/storeId';
 import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
+import { useCollectionLive } from '../../hooks/useCollectionLive';
 
 // Toast Notification Component for better UX
 const Toast = ({ message, type, onClose }) => {
@@ -30,7 +31,7 @@ const Toast = ({ message, type, onClose }) => {
 
 export default function Refunds() {
     const { user, staffAuth, isSessionReady } = useDashboardSession();
-    const [refunds, setRefunds] = useState([]);
+    const { data: liveRefunds, isLoading: liveRefundsLoading, error: liveRefundsError } = useCollectionLive('refunds');
     const [loading, setLoading] = useState(false); // For form submission
     const [pageLoading, setPageLoading] = useState(true); // For initial data load
     const [notification, setNotification] = useState({ message: '', type: '' });
@@ -43,7 +44,13 @@ export default function Refunds() {
     };
     const [newRefund, setNewRefund] = useState(initialRefundState);
 
-    // Fetch existing refunds in REAL-TIME
+    const refunds = [...liveRefunds]
+        .map((item) => ({
+            ...item,
+            date: item.date?.toDate ? item.date.toDate() : new Date(),
+        }))
+        .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0));
+
     useEffect(() => {
         if (!isSessionReady) return;
 
@@ -53,30 +60,12 @@ export default function Refunds() {
             return;
         }
 
-        setPageLoading(true);
-        const q = query(collection(db, 'refunds'), orderBy('date', 'desc'));
-
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const refundsData = querySnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    date: data.date?.toDate ? data.date.toDate() : new Date(),
-                };
-            });
-            setRefunds(refundsData);
-            setPageLoading(false);
-        }, (err) => {
-            console.error('Error fetching refunds:', err);
+        if (liveRefundsError) {
+            console.error('Error fetching refunds:', liveRefundsError);
             setNotification({ message: 'Failed to load refunds in real-time.', type: 'error' });
-            setPageLoading(false);
-        });
-
-        // Cleanup subscription on unmount
-        return () => unsubscribe();
-
-    }, [user, isSessionReady]);
+        }
+        setPageLoading(liveRefundsLoading);
+    }, [user, isSessionReady, liveRefundsLoading, liveRefundsError]);
 
     
     // Process refund

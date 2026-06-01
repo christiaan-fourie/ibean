@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaPlus, FaTools, FaExclamationTriangle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
+import { useCollectionLive } from '../../hooks/useCollectionLive';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -109,7 +110,7 @@ const CategoryDataAuditor = ({ categories, onStartEdit, showNotification }) => {
 
 
 export default function Categories() {
-    const [categories, setCategories] = useState([]);
+    const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
     const { staffAuth } = useDashboardSession();
     const initialCategoryState = { name: '', description: '', active: true, varieties: [], order: 0 };
     const [newCategory, setNewCategory] = useState(initialCategoryState);
@@ -117,22 +118,14 @@ export default function Categories() {
     const [editingCategoryId, setEditingCategoryId] = useState(null);
     const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     useEffect(() => {
-        const q = query(collection(db, 'categories'), orderBy('order'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const categoriesData = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-            setCategories(categoriesData);
-        }, (error) => {
+        if (categoriesError) {
             showNotification('Failed to fetch categories.', 'error');
-            console.error(error);
-        });
-
-        return () => unsubscribe();
-    }, []);
+            console.error(categoriesError);
+        }
+    }, [categoriesError]);
 
     const showNotification = (message, type) => {
         setNotification({ key: Date.now(), message, type });

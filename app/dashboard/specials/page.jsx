@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { FaEdit, FaTrashAlt, FaCalendarAlt, FaTag, FaStar, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { getAuth } from 'firebase/auth';
 import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
+import { useCollectionLive } from '../../hooks/useCollectionLive';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -29,9 +30,9 @@ const Toast = ({ message, type, onClose }) => {
 };
 
 export default function Specials() {
-    const [specials, setSpecials] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [categories, setCategories] = useState([]);
+    const { data: specialsData, error: specialsError } = useCollectionLive('specials');
+    const { data: productsData, error: productsError } = useCollectionLive('products');
+    const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
     const { staffAuth } = useDashboardSession();
     const initialSpecialState = {
         name: '', description: '', active: true, mutuallyExclusive: false,
@@ -45,31 +46,27 @@ export default function Specials() {
     const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('all');
+    const authUser = getAuth().currentUser;
+    const specials = [...specialsData]
+        .filter((s) => documentBelongsToStore(s.storeId, authUser))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const products = [...productsData].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-    // Real-time data fetching
     useEffect(() => {
-        const authUser = getAuth().currentUser;
-
-        const unsubSpecials = onSnapshot(query(collection(db, 'specials'), orderBy('name')), (snapshot) => {
-            setSpecials(
-                snapshot.docs
-                    .map((doc) => ({ id: doc.id, ...doc.data() }))
-                    .filter((s) => documentBelongsToStore(s.storeId, authUser))
-            );
-        });
-        const unsubProducts = onSnapshot(query(collection(db, 'products'), orderBy('name')), (snapshot) => {
-            setProducts(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-        });
-        const unsubCategories = onSnapshot(query(collection(db, 'categories'), orderBy('order')), (snapshot) => {
-            setCategories(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-        });
-
-        return () => {
-            unsubSpecials();
-            unsubProducts();
-            unsubCategories();
-        };
-    }, []);
+        if (specialsError) {
+            showNotification('Failed to fetch specials.', 'error');
+            console.error(specialsError);
+        }
+        if (productsError) {
+            showNotification('Failed to fetch products.', 'error');
+            console.error(productsError);
+        }
+        if (categoriesError) {
+            showNotification('Failed to fetch categories.', 'error');
+            console.error(categoriesError);
+        }
+    }, [specialsError, productsError, categoriesError]);
 
     const showNotification = (message, type) => {
         setNotification({ key: Date.now(), message, type });

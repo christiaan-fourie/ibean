@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { FaRegCircle, FaCheckCircle, FaTrashAlt, FaEdit, FaExclamationCircle } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
@@ -9,6 +9,7 @@ import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 import { FaTools, FaExclamationTriangle } from 'react-icons/fa';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
+import { useCollectionLive } from '../../hooks/useCollectionLive';
 
 
 // Reusable Toast Notification Component
@@ -147,8 +148,8 @@ const ProductDataAuditor = ({ products, categories, onStartEdit, showNotificatio
 
 
 export default function Products() {
-    const [products, setProducts] = useState([]);
-    const [categories, setCategories] = useState([]);
+    const { data: productsData, error: productsError } = useCollectionLive('products');
+    const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
     const [selectedCategory, setSelectedCategory] = useState(null);
     const { staffAuth } = useDashboardSession();
     const [newProduct, setNewProduct] = useState({
@@ -161,39 +162,21 @@ export default function Products() {
     const [editingProductId, setEditingProductId] = useState(null);
     const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const products = [...productsData].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const categories = [...categoriesData]
+        .filter((cat) => cat.active)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-    // Real-time data fetching and initial setup
     useEffect(() => {
-        // Real-time listener for products
-        const productsQuery = query(collection(db, 'products'), orderBy('name'));
-        const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
-            const productsData = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-            setProducts(productsData);
-        }, (error) => {
+        if (productsError) {
             showNotification('Failed to fetch products in real-time.', 'error');
-            console.error(error);
-        });
-
-        // Real-time listener for categories
-        const categoriesQuery = query(collection(db, 'categories'), orderBy('order'));
-        const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
-            const categoriesData = snapshot.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }))
-                .filter((cat) => cat.active);
-            setCategories(categoriesData);
-        }, (error) => {
+            console.error(productsError);
+        }
+        if (categoriesError) {
             showNotification('Failed to fetch categories in real-time.', 'error');
-            console.error(error);
-        });
-
-        return () => {
-            unsubscribeProducts();
-            unsubscribeCategories();
-        };
-    }, []);
+            console.error(categoriesError);
+        }
+    }, [productsError, categoriesError]);
 
     const showNotification = (message, type) => {
         setNotification({ key: Date.now(), message, type });

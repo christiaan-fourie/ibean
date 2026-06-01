@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore'; 
-import db from '../../../utils/firebase'; 
 import RouteGuard from '../../components/RouteGuard';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
+import { useCollectionLive } from '../../hooks/useCollectionLive';
 import {
     calculateProductPaymentTotals,
     calculateRefundTotals,
@@ -39,6 +38,12 @@ const getEndOfDayFromString = (dateString) => {
 
 export default function Reports() {
     const { user, staffAuth, isSessionReady } = useDashboardSession();
+    const salesLive = useCollectionLive('sales');
+    const productsLive = useCollectionLive('products');
+    const specialsLive = useCollectionLive('specials');
+    const staffLive = useCollectionLive('staff');
+    const vouchersLive = useCollectionLive('vouchers');
+    const refundsLive = useCollectionLive('refunds');
 
     // State to hold ALL data fetched from Firestore (unfiltered)
     const [masterData, setMasterData] = useState({
@@ -109,7 +114,6 @@ export default function Reports() {
     }, [staffAuth, user]);
 
 
-    // Replace fetchAllMasterData with a real-time listener
     useEffect(() => {
         if (!isSessionReady) return;
 
@@ -119,42 +123,59 @@ export default function Reports() {
             return;
         }
 
-        setLoading(true);
-        setError('');
+        const errors = [
+            salesLive.error,
+            productsLive.error,
+            specialsLive.error,
+            staffLive.error,
+            vouchersLive.error,
+            refundsLive.error,
+        ].filter(Boolean);
+        if (errors.length > 0) {
+            setError(`Failed to fetch report data: ${errors[0].message}`);
+        } else {
+            setError('');
+        }
 
-        const unsubscribes = [];
-        const collectionsToFetch = [
-            { name: 'sales', stateKey: 'sales' },
-            { name: 'products', stateKey: 'products' },
-            { name: 'specials', stateKey: 'specials' },
-            { name: 'staff', stateKey: 'staff' },
-            { name: 'vouchers', stateKey: 'vouchers' },
-            { name: 'refunds', stateKey: 'refunds' },
-        ];
-
-        collectionsToFetch.forEach(({ name, stateKey }) => {
-            const unsubscribe = onSnapshot(
-                collection(db, name),
-                (snapshot) => {
-                    setMasterData(current => ({
-                        ...current,
-                        [stateKey]: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-                    }));
-                    setLoading(false);
-                },
-                (err) => {
-                    setError(`Failed to fetch ${name}: ${err.message}`);
-                    setLoading(false);
-                }
-            );
-            unsubscribes.push(unsubscribe);
+        setMasterData({
+            sales: salesLive.data,
+            products: productsLive.data,
+            specials: specialsLive.data,
+            staff: staffLive.data,
+            vouchers: vouchersLive.data,
+            refunds: refundsLive.data,
         });
 
-        // Cleanup on unmount
-        return () => {
-            unsubscribes.forEach(unsub => unsub());
-        };
-    }, [user, isSessionReady]);
+        setLoading(
+            salesLive.isLoading ||
+            productsLive.isLoading ||
+            specialsLive.isLoading ||
+            staffLive.isLoading ||
+            vouchersLive.isLoading ||
+            refundsLive.isLoading
+        );
+    }, [
+        user,
+        isSessionReady,
+        salesLive.data,
+        salesLive.isLoading,
+        salesLive.error,
+        productsLive.data,
+        productsLive.isLoading,
+        productsLive.error,
+        specialsLive.data,
+        specialsLive.isLoading,
+        specialsLive.error,
+        staffLive.data,
+        staffLive.isLoading,
+        staffLive.error,
+        vouchersLive.data,
+        vouchersLive.isLoading,
+        vouchersLive.error,
+        refundsLive.data,
+        refundsLive.isLoading,
+        refundsLive.error,
+    ]);
 
     // Effect to filter masterData when it, selectedStore, or dateRange changes
     useEffect(() => {

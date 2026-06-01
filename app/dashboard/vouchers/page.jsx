@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaGift, FaTag, FaCopy } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
+import { useCollectionLive } from '../../hooks/useCollectionLive';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -27,10 +28,10 @@ const Toast = ({ message, type, onClose }) => {
 };
 
 export default function Vouchers() {
-    const [vouchers, setVouchers] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [categories, setCategories] = useState([]);
     const { staffAuth } = useDashboardSession();
+    const { data: vouchersData, error: vouchersError } = useCollectionLive('vouchers');
+    const { data: products } = useCollectionLive('products');
+    const { data: categories } = useCollectionLive('categories');
     const initialVoucherState = {
         name: '', code: '', active: true, redeemed: false,
         voucherType: 'discount', // discount, freeItem, giftCard
@@ -46,20 +47,17 @@ export default function Vouchers() {
     const [editingId, setEditingId] = useState(null);
     const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const vouchers = [...vouchersData].sort((a, b) => {
+        const at = a?.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+        const bt = b?.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+        return bt - at;
+    });
 
     useEffect(() => {
-        const unsubVouchers = onSnapshot(query(collection(db, 'vouchers'), orderBy('createdAt', 'desc')), (snap) => {
-            setVouchers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        const unsubProducts = onSnapshot(query(collection(db, 'products'), orderBy('name')), (snap) => {
-            setProducts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-        const unsubCategories = onSnapshot(query(collection(db, 'categories'), orderBy('order')), (snap) => {
-            setCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-
-        return () => { unsubVouchers(); unsubProducts(); unsubCategories(); };
-    }, []);
+        if (vouchersError) {
+            showNotification('Failed to fetch vouchers.', 'error');
+        }
+    }, [vouchersError]);
 
     const showNotification = (message, type) => {
         setNotification({ key: Date.now(), message, type });
