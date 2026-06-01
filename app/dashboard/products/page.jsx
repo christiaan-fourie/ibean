@@ -8,8 +8,8 @@ import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
 import { FaTools, FaExclamationTriangle } from 'react-icons/fa';
-import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
+import { useAuditActor } from '../../hooks/useAuditActor';
 
 
 // Reusable Toast Notification Component
@@ -151,7 +151,6 @@ export default function Products() {
     const { data: productsData, error: productsError } = useCollectionLive('products');
     const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
     const [selectedCategory, setSelectedCategory] = useState(null);
-    const { staffAuth } = useDashboardSession();
     const [newProduct, setNewProduct] = useState({
         name: '',
         description: '',
@@ -166,6 +165,7 @@ export default function Products() {
     const categories = [...categoriesData]
         .filter((cat) => cat.active)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const { hasAuditActor, getAuditActor } = useAuditActor();
 
     useEffect(() => {
         if (productsError) {
@@ -244,6 +244,10 @@ export default function Products() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!hasAuditActor) {
+            showNotification('Staff audit identity is missing.', 'error');
+            return;
+        }
         setIsLoading(true);
         try {
             const auth = getAuth();
@@ -284,7 +288,7 @@ export default function Products() {
 
 
             if (editingProductId) {
-                productData.updatedBy = { id: staffAuth.staffId, name: staffAuth.staffName, role: staffAuth.accountType };
+                productData.updatedBy = getAuditActor();
                 // Preserve original creation data when updating
                 productData.createdAt = newProduct.createdAt;
                 productData.createdBy = newProduct.createdBy;
@@ -292,7 +296,7 @@ export default function Products() {
                 showNotification('Product updated successfully.', 'success');
             } else {
                 productData.createdAt = now;
-                productData.createdBy = { id: staffAuth.staffId, name: staffAuth.staffName, role: staffAuth.accountType };
+                productData.createdBy = getAuditActor();
                 await addDoc(collection(db, 'products'), productData);
                 showNotification('Product added successfully.', 'success');
             }

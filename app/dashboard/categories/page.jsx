@@ -7,8 +7,8 @@ import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
 import RouteGuard from '../../components/RouteGuard';
-import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
+import { useAuditActor } from '../../hooks/useAuditActor';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -111,7 +111,6 @@ const CategoryDataAuditor = ({ categories, onStartEdit, showNotification }) => {
 
 export default function Categories() {
     const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
-    const { staffAuth } = useDashboardSession();
     const initialCategoryState = { name: '', description: '', active: true, varieties: [], order: 0 };
     const [newCategory, setNewCategory] = useState(initialCategoryState);
     const [varietyInput, setVarietyInput] = useState('');
@@ -119,6 +118,7 @@ export default function Categories() {
     const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
     const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const { hasAuditActor, getAuditActor } = useAuditActor();
 
     useEffect(() => {
         if (categoriesError) {
@@ -179,6 +179,10 @@ export default function Categories() {
             showNotification('Category name is required.', 'error');
             return;
         }
+        if (!hasAuditActor) {
+            showNotification('Staff audit identity is missing.', 'error');
+            return;
+        }
         setIsLoading(true);
         try {
             const auth = getAuth();
@@ -192,13 +196,13 @@ export default function Categories() {
             };
 
             if (editingCategoryId) {
-                categoryData.updatedBy = { id: staffAuth.staffId, name: staffAuth.staffName, role: staffAuth.accountType };
+                categoryData.updatedBy = getAuditActor();
                 await updateDoc(doc(db, 'categories', editingCategoryId), categoryData);
                 showNotification('Category updated successfully.', 'success');
             } else {
                 categoryData.order = categories.length; // Add to the end
                 categoryData.createdAt = now;
-                categoryData.createdBy = { id: staffAuth.staffId, name: staffAuth.staffName, role: staffAuth.accountType };
+                categoryData.createdBy = getAuditActor();
                 await addDoc(collection(db, 'categories'), categoryData);
                 showNotification('Category added successfully.', 'success');
             }

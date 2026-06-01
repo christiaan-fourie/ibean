@@ -7,6 +7,7 @@ import { getStoreId } from '../../../utils/storeId';
 import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
+import { useAuditActor } from '../../hooks/useAuditActor';
 
 // Toast Notification Component for better UX
 const Toast = ({ message, type, onClose }) => {
@@ -31,6 +32,7 @@ const Toast = ({ message, type, onClose }) => {
 
 export default function Refunds() {
     const { user, staffAuth, isSessionReady } = useDashboardSession();
+    const { hasAuditActor, getAuditActor } = useAuditActor();
     const { data: liveRefunds, isLoading: liveRefundsLoading, error: liveRefundsError } = useCollectionLive('refunds');
     const [loading, setLoading] = useState(false); // For form submission
     const [pageLoading, setPageLoading] = useState(true); // For initial data load
@@ -75,7 +77,7 @@ export default function Refunds() {
             setNotification({ message: 'Please fill in all required fields.', type: 'error' });
             return;
         }
-        if (!staffAuth || !staffAuth.staffId || !staffAuth.staffName) {
+        if (!hasAuditActor) {
             setNotification({ message: 'Staff authentication is missing. Cannot process refund.', type: 'error' });
             return;
         }
@@ -96,11 +98,7 @@ export default function Refunds() {
             staffName: staffAuth.staffName,
             date: Timestamp.fromDate(new Date()),
             storeId: storeIdentifier,
-            createdBy: {
-                id: staffAuth.staffId,
-                name: staffAuth.staffName,
-                role: staffAuth.accountType || 'staff',
-            },
+            createdBy: getAuditActor(),
         };
 
         try {

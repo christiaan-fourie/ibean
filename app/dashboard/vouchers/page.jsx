@@ -5,8 +5,8 @@ import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'fireba
 import { FaTrashAlt, FaEdit, FaCheckCircle, FaExclamationCircle, FaGift, FaTag, FaCopy } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
-import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
+import { useAuditActor } from '../../hooks/useAuditActor';
 
 // Reusable Toast Notification Component
 const Toast = ({ message, type, onClose }) => {
@@ -28,7 +28,6 @@ const Toast = ({ message, type, onClose }) => {
 };
 
 export default function Vouchers() {
-    const { staffAuth } = useDashboardSession();
     const { data: vouchersData, error: vouchersError } = useCollectionLive('vouchers');
     const { data: products } = useCollectionLive('products');
     const { data: categories } = useCollectionLive('categories');
@@ -47,6 +46,7 @@ export default function Vouchers() {
     const [editingId, setEditingId] = useState(null);
     const [notification, setNotification] = useState({ key: 0, message: '', type: '' });
     const [isLoading, setIsLoading] = useState(false);
+    const { hasAuditActor, getAuditActor } = useAuditActor();
     const vouchers = [...vouchersData].sort((a, b) => {
         const at = a?.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
         const bt = b?.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
@@ -97,6 +97,10 @@ export default function Vouchers() {
             showNotification('Voucher Name and Expiration Date are required.', 'error');
             return;
         }
+        if (!hasAuditActor) {
+            showNotification('Staff audit identity is missing.', 'error');
+            return;
+        }
         setIsLoading(true);
 
         try {
@@ -108,7 +112,7 @@ export default function Vouchers() {
                 initialValue: parseFloat(newVoucher.initialValue) || 0,
                 currentBalance: parseFloat(newVoucher.initialValue) || 0,
                 maxRedemptions: parseInt(newVoucher.maxRedemptions, 10) || 1,
-                createdBy: { id: staffAuth.staffId, name: staffAuth.staffName, role: staffAuth.accountType },
+                createdBy: getAuditActor(),
                 createdAt: Timestamp.now(),
             };
 
