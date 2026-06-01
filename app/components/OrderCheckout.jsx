@@ -11,7 +11,6 @@ import ConfirmOrder from './ConfirmOrder';
 import {
   calculateOrderTotals,
   applySpecialsToOrder,
-  appliedSpecialsEqual,
 } from '../../utils/pricing';
 
 export default function OrderCheckout() {
@@ -19,7 +18,6 @@ export default function OrderCheckout() {
   const [orderDetails, setOrderDetails] = useState([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [allSpecials, setAllSpecials] = useState([]);
-  const [appliedSpecials, setAppliedSpecials] = useState([]);
   const [vat] = useState(14 / 100);
   const [specialsError, setSpecialsError] = useState('');
 
@@ -65,12 +63,10 @@ export default function OrderCheckout() {
     };
   }, []);
 
-  useEffect(() => {
-    const newAppliedSpecials = applySpecialsToOrder(orderDetails, allSpecials, user);
-    setAppliedSpecials((prev) =>
-      appliedSpecialsEqual(newAppliedSpecials, prev) ? prev : newAppliedSpecials
-    );
-  }, [orderDetails, allSpecials, user]);
+  const appliedSpecials = useMemo(
+    () => applySpecialsToOrder(orderDetails, allSpecials, user),
+    [orderDetails, allSpecials, user]
+  );
 
   const handleQuantityChange = (id, delta) => {
     const newOrder = orderDetails
@@ -98,50 +94,50 @@ export default function OrderCheckout() {
   );
 
   return (
-    <div className="flex flex-col p-2.5 bg-neutral-900/70 backdrop-blur-xl shadow-md border-l border-white/10 min-w-full sm:min-w-[320px] sm:max-w-[360px] h-full">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-neutral-900/70 p-3 backdrop-blur-xl">
       <div className="flex-shrink-0">
-        <h2 className="text-sm font-semibold text-white mt-2">Order Summary</h2>
+        <h2 className="text-base font-semibold text-white mt-1">Order Summary</h2>
         <p className="text-xs text-gray-400">Adjust quantities as needed.</p>
         {specialsError && (
           <div className="my-1 p-1.5 bg-red-600/80 border border-red-300/20 text-white text-[10px] rounded-xl">{specialsError}</div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-1 mt-1.5">
+      <div className="mt-2 flex-1 min-h-0 overflow-y-auto pr-1">
         <ul>
           {orderDetails.length > 0 ? (
             orderDetails.map((item) => (
               <li
                 key={item.id}
-                className="flex justify-between gap-2 items-center text-gray-300 mb-1 py-2 border-b border-neutral-900"
+                className="flex justify-between gap-2 items-center text-gray-300 mb-1.5 py-2.5 border-b border-white/10"
               >
-                <div className="flex items-center gap-1.5 flex-grow min-w-0">
+                <div className="flex items-center gap-2 flex-grow min-w-0">
                   <button
                     onClick={() => handleQuantityChange(item.id, -1)}
-                    className="p-0.5 bg-white/10 border border-white/10 text-white rounded-lg hover:bg-white/15 flex-shrink-0 text-xs"
+                    className="flex h-8 w-8 items-center justify-center bg-white/10 border border-white/10 text-white rounded-xl hover:bg-white/15 flex-shrink-0 text-xs"
                     aria-label={`Decrease quantity of ${item.name}`}
                     title={`Decrease quantity of ${item.name}`}
                   >
                     <FaMinus />
                   </button>
-                  <span className="w-3 text-center flex-shrink-0 text-xs">{item.quantity}</span>
+                  <span className="w-5 text-center flex-shrink-0 text-sm font-semibold text-white">{item.quantity}</span>
                   <button
                     onClick={() => handleQuantityChange(item.id, 1)}
-                    className="p-0.5 bg-white/10 border border-white/10 text-white rounded-lg hover:bg-white/15 flex-shrink-0 text-xs"
+                    className="flex h-8 w-8 items-center justify-center bg-white/10 border border-white/10 text-white rounded-xl hover:bg-white/15 flex-shrink-0 text-xs"
                     aria-label={`Increase quantity of ${item.name}`}
                     title={`Increase quantity of ${item.name}`}
                   >
                     <FaPlus />
                   </button>
-                  <span className="ml-1 flex-shrink min-w-0 break-words text-xs">{item.name}</span>
+                  <span className="ml-1 flex-shrink min-w-0 break-words text-sm leading-tight">{item.name}</span>
                 </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <div className="text-right whitespace-nowrap text-xs">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="text-right whitespace-nowrap text-sm font-medium text-white">
                     R {((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
                   </div>
                   <button
                     onClick={() => handleDeleteItem(item.id)}
-                    className="p-0.5 bg-red-500/90 text-white rounded-lg hover:bg-red-500 text-xs"
+                    className="flex h-8 w-8 items-center justify-center bg-red-500/90 text-white rounded-xl hover:bg-red-500 text-xs"
                     aria-label={`Remove ${item.name} from order`}
                     title={`Remove ${item.name} from order`}
                   >
@@ -151,12 +147,12 @@ export default function OrderCheckout() {
               </li>
             ))
           ) : (
-            <p className="text-center text-neutral-500 py-2 text-xs">Your order is empty.</p>
+            <p className="text-center text-neutral-500 py-6 text-sm">Your order is empty.</p>
           )}
         </ul>
       </div>
 
-      <div className="flex-shrink-0">
+      <div className="flex-shrink-0 border-t border-white/10 bg-neutral-900/85 backdrop-blur-md pt-2">
         {appliedSpecials.length > 0 && (
           <div className="mt-2">
             <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
@@ -201,12 +197,12 @@ export default function OrderCheckout() {
             <span>Tax included ({(vat * 100).toFixed(0)}%)</span>
             <span>R {totals.tax.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between font-bold text-sm text-white mt-1">
+          <div className="flex justify-between font-bold text-lg text-white mt-2">
             <span>Total</span>
             <span>R {totals.total.toFixed(2)}</span>
           </div>
           <button
-            className="mt-2 w-full bg-blue-500 text-white py-1.5 text-sm rounded-xl hover:bg-blue-600 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
+            className="mt-3 min-h-12 w-full bg-blue-500 text-white py-2 text-base font-semibold rounded-xl hover:bg-blue-600 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
             onClick={() => setShowConfirmation(true)}
             disabled={orderDetails.length === 0}
           >

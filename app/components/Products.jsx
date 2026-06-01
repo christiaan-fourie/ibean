@@ -129,45 +129,10 @@ const Products = () => {
   const [isSizeModalOpen, setIsSizeModalOpen] = useState(false); // State for modal visibility
   const [selectedCategory, setSelectedCategory] = useState('All'); // State for category filter
   const [searchQuery, setSearchQuery] = useState(''); // State for search query
-  const [sortOrder, setSortOrder] = useState('name'); // New state for sorting
   const [toast, setToast] = useState(null); // State for toast notifications
   const [loading, setLoading] = useState(true); // Loading state
   const [addedProductId, setAddedProductId] = useState(null); // Track recently added product
   const lastAddAtRef = useRef({});
-
-  // Add sort options
-  const sortOptions = [
-    { value: 'name', label: 'Name A-Z' },
-    { value: 'name_desc', label: 'Name Z-A' },
-    { value: 'price', label: 'Price Low-High' },
-    { value: 'price_desc', label: 'Price High-Low' }
-  ];
-
-  // Function to sort products
-  const sortProducts = (products) => {
-    const sortedProducts = [...products];
-    
-    switch (sortOrder) {
-      case 'name':
-        return sortedProducts.sort((a, b) => a.name.localeCompare(b.name));
-      case 'name_desc':
-        return sortedProducts.sort((a, b) => b.name.localeCompare(a.name));
-      case 'price':
-        return sortedProducts.sort((a, b) => {
-          const priceA = typeof a.price === 'number' ? a.price : parseFloat(String(a.price));
-          const priceB = typeof b.price === 'number' ? b.price : parseFloat(String(b.price));
-          return priceA - priceB;
-        });
-      case 'price_desc':
-        return sortedProducts.sort((a, b) => {
-          const priceA = typeof a.price === 'number' ? a.price : parseFloat(String(a.price));
-          const priceB = typeof b.price === 'number' ? b.price : parseFloat(String(b.price));
-          return priceB - priceA;
-        });
-      default:
-        return sortedProducts;
-    }
-  };
 
   // Function to check if a product matches the search query
   const matchesSearch = (product) => {
@@ -196,7 +161,6 @@ const Products = () => {
 
   useEffect(() => {
     if (!user) {
-      setLoading(true);
       return;
     }
 
@@ -299,52 +263,37 @@ const Products = () => {
   };
 
   // Filter products based on selected category and search query
-  const filteredProducts = selectedCategory === 'All'
-    ? sortProducts(products.filter(matchesSearch))
-    : sortProducts(products.filter(product => 
+  const filteredProducts = (selectedCategory === 'All'
+    ? products.filter(matchesSearch)
+    : products.filter((product) =>
         product.category === selectedCategory && matchesSearch(product)
-      ));
+      )
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="flex flex-col w-full h-full bg-neutral-900/35"> {/* Use h-full instead of min-h-screen */}
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-neutral-900/35">
 
       {/* Toast Notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
-      {/* Category Tabs Section & Sorting */}
+      {/* Category Tabs Section */}
       <div className="flex-shrink-0 bg-neutral-900/55 backdrop-blur-xl border-b border-white/10 shadow-lg">
-        <div className="px-4 py-3 flex justify-between items-center gap-4 flex-wrap">
+        <div className="px-4 py-3">
           {/* Category Tabs */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+          <div className="flex flex-wrap gap-2">
             {categories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                className={`min-h-11 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
                   selectedCategory === category
-                    ? 'bg-indigo-600 text-white shadow-lg scale-105'
-                    : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:scale-102'
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
+                    : 'bg-white/10 border border-white/10 text-neutral-300 hover:bg-white/15'
                 }`}
               >
                 {category}
               </button>
             ))}
-          </div>        
-          
-          {/* Sort Options */}
-          <div className="flex items-center gap-2">
-            <label className="text-neutral-400 text-sm whitespace-nowrap">Sort by:</label>
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              className="bg-neutral-800 text-white px-4 py-2 rounded-lg border border-neutral-700 focus:border-indigo-500 focus:outline-none transition-colors cursor-pointer hover:bg-neutral-700"
-            >
-              {sortOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -357,7 +306,7 @@ const Products = () => {
               placeholder="Search products by name or description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 rounded-full text-base bg-neutral-800 text-white border border-neutral-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder-neutral-500"
+              className="w-full min-h-12 pl-12 pr-12 py-3 rounded-full text-base bg-white/10 text-white border border-white/10 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all placeholder-neutral-500"
             />
             {searchQuery && (
               <button
@@ -372,8 +321,8 @@ const Products = () => {
       </div>
 
       {/* Product Grid - Takes up remaining space */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {loading ? (
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
+        {!user || loading ? (
           <div className="flex items-center justify-center min-h-[300px]">
             <div className="text-center">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mb-3"></div>
@@ -394,7 +343,7 @@ const Products = () => {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="mt-3 px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                  className="mt-3 px-4 py-2 text-sm bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
                 >
                   Clear Search
                 </button>
@@ -402,7 +351,7 @@ const Products = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(92px,1fr))] gap-2.5">
             {filteredProducts.map((product) => {
               const isJustAdded = addedProductId === product.id;
               const hasVariety = product.varietyPrices && Object.keys(product.varietyPrices).length > 0;
@@ -413,10 +362,10 @@ const Products = () => {
                   type="button"
                   onClick={() => handleProductClick(product)}
                   disabled={isJustAdded}
-                  className={`relative flex flex-col bg-neutral-800 border rounded-lg p-2.5 transition-all duration-300 hover:shadow-xl hover:scale-105 hover:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:pointer-events-none disabled:opacity-80 ${
+                  className={`relative flex min-h-24 flex-col bg-neutral-800/90 border rounded-xl p-3 transition-all duration-200 hover:shadow-xl hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:pointer-events-none disabled:opacity-80 ${
                     isJustAdded 
-                      ? 'border-green-500 bg-green-900/20 scale-105' 
-                      : 'border-neutral-700'
+                      ? 'border-green-500 bg-green-900/20' 
+                      : 'border-white/10'
                   }`}
                   aria-label={`Add ${product.name} to order`}
                 >
@@ -437,7 +386,7 @@ const Products = () => {
                   <div className="mt-auto">
                     {hasVariety ? (
                       <div className="text-center">
-                        <p className="text-xs text-indigo-400 font-medium mb-0.5">
+                        <p className="text-xs text-blue-300 font-medium mb-0.5">
                           From R {safeFormatPrice(Math.min(...Object.values(product.varietyPrices)))}
                         </p>
                         <p className="text-[10px] text-neutral-500">Multiple sizes</p>
@@ -465,7 +414,7 @@ const Products = () => {
           onSelectVariety={handleSelectVariety}
         />
       )}
-    </div> // End main flex container
+    </div>
   );
 };
 

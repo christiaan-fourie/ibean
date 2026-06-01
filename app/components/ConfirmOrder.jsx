@@ -23,7 +23,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const [remainingAmount, setRemainingAmount] = useState(0);
     const [showSecondaryPayment, setShowSecondaryPayment] = useState(false);
     const [voucherDiscountedItems, setVoucherDiscountedItems] = useState([]);
-    const [mounted, setMounted] = useState(false);
 
     // FIX: Ensure totalPrice is always treated as a number
     const numericTotalPrice = parseFloat(totalPrice) || 0;
@@ -51,11 +50,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                 // setError("Failed to load staff details. Please try again."); // Optional: inform user
             }
         }
-    }, []);
-
-    useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
     }, []);
 
     // Reset calculated total when totalPrice changes
@@ -505,31 +499,31 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const subtotalBeforeDiscounts = orderDetails.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const specialsDiscount = appliedSpecials.reduce((sum, special) => sum + special.savedAmount, 0);
 
-    if (!mounted) return null;
+    if (typeof document === 'undefined') return null;
 
     return createPortal((
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm">
-        <div className="h-full w-full bg-neutral-900/95 text-neutral-50 border border-white/10 p-4 sm:p-6 flex flex-col">
+        <div className="h-full w-full bg-neutral-900/95 text-neutral-50 border border-white/10 p-4 md:p-6 flex flex-col">
           <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
             <h2 className="text-2xl font-bold text-white">Checkout</h2>
             <button
               onClick={() => onClose(false)}
-              className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/10 text-sm hover:bg-white/15"
+              className="min-h-10 px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-sm hover:bg-white/15"
             >
               Close
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)] gap-4 md:gap-6">
             <div className="min-w-0 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-800/70 p-4">
               {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
               <div className="mb-4">
                 <h3 className="text-lg font-semibold text-neutral-200">Order Summary</h3>
                 <ul className="my-2 divide-y divide-neutral-700">
                   {orderDetails.map((item) => (
-                    <li key={item.id} className="flex justify-between py-2 text-neutral-300">
-                      <span>{item.name} {item.size && `(${item.size})`}</span>
-                      <span>R{parseFloat(item.price).toFixed(2)} x {item.quantity}</span>
+                    <li key={item.id} className="flex justify-between gap-4 py-2.5 text-neutral-300">
+                      <span className="min-w-0 break-words">{item.name} {item.size && `(${item.size})`}</span>
+                      <span className="shrink-0 whitespace-nowrap">R{parseFloat(item.price).toFixed(2)} x {item.quantity}</span>
                     </li>
                   ))}
                 </ul>
@@ -574,12 +568,12 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
             <div className="min-w-0 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-800/70 p-4 flex flex-col justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-neutral-200">Payment</h3>
-                <div className="flex gap-2 mt-2">
+                <div className="grid grid-cols-2 gap-2 mt-2">
                   {paymentMethods.map(method => (
                     <button
                       key={method.id}
                       onClick={() => setPaymentMethod(method.id)}
-                      className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                      className={`min-h-14 px-4 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
                         paymentMethod === method.id ? 'bg-blue-500 text-white' : 'bg-white/10 border border-white/10 text-neutral-300 hover:bg-white/15'
                       }`}
                     >
@@ -591,32 +585,32 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
               </div>
 
               {paymentMethod === 'cash' && !showSecondaryPayment && (
-                <div className="mb-4 p-4 bg-neutral-900/50 rounded-lg mt-4">
+                <div className="mb-4 p-4 bg-neutral-900/50 rounded-xl mt-4 border border-white/10">
                   <label className="block text-sm font-medium text-neutral-400">Cash Received</label>
                   <input
                     type="number"
                     value={cashReceived}
                     onChange={(e) => setCashReceived(e.target.value)}
-                    className="mt-1 block w-full px-4 py-2 border border-neutral-600 bg-neutral-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-1 block min-h-12 w-full px-4 py-2 border border-white/10 bg-white/10 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter cash amount from customer"
                   />
                 </div>
               )}
 
               {paymentMethod === 'voucher' && (
-                <div className="mb-4 p-4 bg-neutral-900/50 rounded-lg mt-4">
+                <div className="mb-4 p-4 bg-neutral-900/50 rounded-xl mt-4 border border-white/10">
                   <h3 className="text-lg font-semibold text-neutral-200">Voucher Code</h3>
                   <div className="flex gap-2 mt-2">
                     <input
                       type="text"
                       value={voucherCode}
                       onChange={(e) => setVoucherCode(e.target.value)}
-                      className="flex-1 px-4 py-2 border border-neutral-600 bg-neutral-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 min-h-12 px-4 py-2 border border-white/10 bg-white/10 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Enter voucher code"
                     />
                     <button
                       onClick={applyVoucher}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold transition-all hover:bg-blue-600"
+                      className="min-h-12 px-4 py-2 bg-blue-500 text-white rounded-xl font-semibold transition-all hover:bg-blue-600"
                     >
                       Apply
                     </button>
@@ -632,14 +626,14 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
               )}
 
               {showSecondaryPayment && (
-                <div className="mb-4 p-4 bg-neutral-900/50 rounded-lg mt-4">
+                <div className="mb-4 p-4 bg-neutral-900/50 rounded-xl mt-4 border border-white/10">
                   <h3 className="text-lg font-semibold text-neutral-200">Secondary Payment</h3>
-                  <div className="flex gap-2 mt-2">
+                  <div className="grid grid-cols-3 gap-2 mt-2">
                     {secondaryPaymentMethods.map(method => (
                       <button
                         key={method.id}
                         onClick={() => setSecondaryPaymentMethod(method.id)}
-                        className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                        className={`min-h-12 px-4 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
                           secondaryPaymentMethod === method.id ? 'bg-blue-500 text-white' : 'bg-white/10 border border-white/10 text-neutral-300 hover:bg-white/15'
                         }`}
                       >
@@ -655,7 +649,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                         type="number"
                         value={cashReceived}
                         onChange={(e) => setCashReceived(e.target.value)}
-                        className="mt-1 block w-full px-4 py-2 border border-neutral-600 bg-neutral-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="mt-1 block min-h-12 w-full px-4 py-2 border border-white/10 bg-white/10 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="Enter cash received"
                       />
                     </div>
@@ -663,16 +657,16 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                 </div>
               )}
 
-              <div className="flex justify-between mt-6 border-t border-neutral-700 pt-4 gap-2">
+              <div className="grid grid-cols-2 mt-6 border-t border-neutral-700 pt-4 gap-2">
                 <button
                   onClick={() => onClose(false)}
-                  className="px-6 py-2 bg-white/10 border border-white/10 text-neutral-200 rounded-xl font-semibold transition-all hover:bg-white/15"
+                  className="min-h-12 px-6 py-2 bg-white/10 border border-white/10 text-neutral-200 rounded-xl font-semibold transition-all hover:bg-white/15"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleConfirm(paymentMethod)}
-                  className={`px-6 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
+                  className={`min-h-12 px-6 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
                     processing || !paymentMethod ? 'bg-blue-900/60 text-neutral-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'
                   }`}
                   disabled={processing || !paymentMethod}

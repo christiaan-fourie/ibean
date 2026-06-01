@@ -239,10 +239,15 @@ export default function RootLayout({ children }) {
 
     return (
         <DashboardSessionProvider value={sessionValue}>
-        <div className="flex h-screen bg-neutral-900">
+        <div className="flex h-screen overflow-hidden bg-neutral-900">
             {/* Compact Icon Sidebar */}
-            <aside className="bg-neutral-900/70 backdrop-blur-xl border-r border-white/10 flex flex-col w-16 shadow-lg z-10">
-                <nav className="flex-1 py-2">
+            <aside className="bg-neutral-950/70 backdrop-blur-2xl border-r border-white/10 flex flex-col w-[68px] shadow-lg z-10">
+                <div className="flex h-14 items-center justify-center border-b border-white/10">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-500 text-sm font-bold text-white shadow-lg shadow-blue-500/25">
+                        iB
+                    </div>
+                </div>
+                <nav className="flex-1 py-3">
                     {menuItems
                         .filter(item => staffAuth && item.roles.includes(staffAuth.accountType))
                         .map((item) => {
@@ -253,19 +258,22 @@ export default function RootLayout({ children }) {
                                 <Link
                                     href={item.href}
                                     key={item.name}
-                                    className={`group relative flex items-center justify-center p-3 mx-2 my-1 rounded-lg transition-all ${
+                                    className={`group relative mx-2 mb-1 flex h-11 w-11 items-center justify-center rounded-2xl transition-all ${
                                         isActive 
-                                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' 
+                                            ? 'bg-white text-neutral-950 shadow-lg' 
                                             : 'text-neutral-400 hover:bg-white/10 hover:text-white'
                                     }`}
                                     title={item.name}
                                 >
+                                    {isActive && (
+                                        <span className="absolute -left-2 h-6 w-1 rounded-r-full bg-blue-400" />
+                                    )}
                                     <Icon className="text-xl" />
                                     
                                     {/* Tooltip on hover */}
-                                    <div className="absolute left-full ml-2 px-3 py-1.5 bg-neutral-900/95 backdrop-blur-xl text-white text-sm rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg border border-white/10">
+                                    <div className="absolute left-full ml-3 px-3 py-1.5 bg-neutral-950/95 backdrop-blur-xl text-white text-sm rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg border border-white/10">
                                         {item.name}
-                                        <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 bg-neutral-900 rotate-45 border-l border-b border-white/10"></div>
+                                        <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 w-2 h-2 bg-neutral-950 rotate-45 border-l border-b border-white/10"></div>
                                     </div>
                                 </Link>
                             );
@@ -275,23 +283,20 @@ export default function RootLayout({ children }) {
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col overflow-auto bg-neutral-900">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-neutral-900">
                 {/* Top Header Bar - Sticky */}
-                <header className="sticky top-0 bg-neutral-900/75 backdrop-blur-xl border-b border-white/10 shadow-lg z-20">
-                    <div className="flex items-center justify-between px-4 py-2">
+                <header className="relative z-20 flex-shrink-0 bg-neutral-950/70 backdrop-blur-2xl border-b border-white/10 shadow-lg">
+                    <div className="flex h-14 items-center justify-between px-4">
                         {/* Left: Branding */}
                         <div className="flex items-center gap-3">
-                            <div className="bg-blue-500 text-white p-2 rounded-xl shadow-lg shadow-blue-500/30">
-                                <span className="text-xl font-bold">iB</span>
-                            </div>
                             <div>
-                                <h1 className="text-white font-bold text-lg leading-none">iBEAN</h1>
-                                <p className="text-neutral-400 text-xs">POS System</p>
+                                <h1 className="text-white font-semibold text-base leading-none">iBEAN</h1>
+                                <p className="text-neutral-500 text-xs">POS System</p>
                             </div>
                         </div>
 
                         {/* Center: Current Time */}
-                        <div className="hidden md:flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-xl">
+                        <div className="hidden md:flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-2xl">
                             <FaClock className="text-blue-400" />
                             <div className="text-sm">
                                 <div className="text-white font-medium">
@@ -304,10 +309,10 @@ export default function RootLayout({ children }) {
                         </div>
 
                         {/* Right: Staff Info & Actions */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                             {staffAuth && (
-                                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 rounded-xl">
-                                    <FaUserCircle className="text-2xl text-blue-400" />
+                                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-2xl">
+                                    <FaUserCircle className="text-xl text-blue-400" />
                                     <div className="hidden sm:block">
                                         <div className="text-white text-sm font-medium">{staffAuth.staffName}</div>
                                         <div className="text-neutral-400 text-xs capitalize">{staffAuth.accountType}</div>
@@ -317,7 +322,7 @@ export default function RootLayout({ children }) {
                             
                             <button
                                 onClick={handleEndShift}
-                                className="p-2 bg-white/10 hover:bg-white/15 text-white rounded-xl border border-white/10 transition-colors"
+                                className="flex h-10 w-10 items-center justify-center bg-white/10 hover:bg-white/15 text-white rounded-2xl border border-white/10 transition-colors"
                                 title="Switch User"
                             >
                                 <AiOutlineLogout className="text-xl" />
@@ -327,7 +332,7 @@ export default function RootLayout({ children }) {
                 </header>
 
                 {/* Main Content */}
-                <main className="flex-1">
+                <main className="min-h-0 flex-1 overflow-hidden">
                     {children}
                 </main>
             </div>
