@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import RouteGuard from '../../components/RouteGuard';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
@@ -12,7 +12,6 @@ import {
     calculateAdditionalStats
 } from '../../../utils/reportCalculations';
 import {
-    aggregatePromotionsSummary,
     aggregateSalesReconciliation,
     aggregateSpecialsBreakdown,
     sumAggregateProductTotals,
@@ -45,230 +44,101 @@ export default function Reports() {
     const vouchersLive = useCollectionLive('vouchers');
     const refundsLive = useCollectionLive('refunds');
 
-    // State to hold ALL data fetched from Firestore (unfiltered)
-    const [masterData, setMasterData] = useState({
-        sales: [],
-        products: [],
-        specials: [],
-        staff: [],
-        vouchers: [],
-        refunds: [],
-    });
-
-    // State to hold client-side filtered data based on dateRange and selectedStore
-    const [filteredData, setFilteredData] = useState({
-        sales: [],
-        refunds: [],
-        // products, specials, etc., are usually not filtered this way, so they can come from masterData directly if needed by calcs
-    });
-
     const [dateRange, setDateRange] = useState({
         start: new Date().toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0],
     });
-
-    const [stores] = useState(CHILLZONE_STORES);
-
-    const [salesTotals, setSalesTotals] = useState({});
-    const [promotionsSummary, setPromotionsSummary] = useState({
-        specialsDiscount: 0,
-        voucherDiscount: 0,
-        totalPromotions: 0,
-        salesWithSpecials: 0,
-        transactionCount: 0,
-    });
-    const [salesReconciliation, setSalesReconciliation] = useState({
-        gross: 0,
-        promotions: 0,
-        net: 0,
-        transactionCount: 0,
-    });
-    const [specialsBreakdown, setSpecialsBreakdown] = useState([]);
-    const [staffTotals, setStaffTotals] = useState([]);
-    const [refundTotals, setRefundTotals] = useState([]);
-    const [calculatedStats, setCalculatedStats] = useState({
-        peakHour: 'N/A', bestDay: 'N/A', topPaymentMethod: 'N/A',
-        refundRate: '0.0', avgItemsPerSale: '0.0', revenuePerHour: 0,
-        totalSalesValue: 0, totalRefundsValue: 0, totalTransactions: 0,
-    });
-
-    const [voucherStats, setVoucherStats] = useState({
-        totalVouchersRedeemed: 0,
-        totalVoucherValue: 0,
-        voucherUsageByType: {},
-        mostPopularVoucherType: 'N/A',
-        percentSalesWithVouchers: 0,
-    });
+    const stores = CHILLZONE_STORES;
 
     const [selectedStore, setSelectedStore] = useState('All stores');
-    const [loading, setLoading] = useState(false); // Combined loading state
-    const [error, setError] = useState('');
-    const [liveUpdate, setLiveUpdate] = useState(false);
-    const prevMasterDataRef = useRef(masterData);
+    const effectiveSelectedStore = staffAuth?.accountType === 'staff' ? (user?.email || 'All stores') : selectedStore;
+    const masterData = useMemo(() => ({
+        sales: salesLive.data,
+        products: productsLive.data,
+        specials: specialsLive.data,
+        staff: staffLive.data,
+        vouchers: vouchersLive.data,
+        refunds: refundsLive.data,
+    }), [
+        salesLive.data,
+        productsLive.data,
+        specialsLive.data,
+        staffLive.data,
+        vouchersLive.data,
+        refundsLive.data,
+    ]);
 
-    // NEW: Automatically set the store for staff members
-    useEffect(() => {
-        if (staffAuth?.accountType === 'staff' && user?.email) {
-            setSelectedStore(user.email);
-        }
-    }, [staffAuth, user]);
-
-
-    useEffect(() => {
-        if (!isSessionReady) return;
-
-        if (!user) {
-            setError("Please log in to view reports.");
-            setMasterData({ sales: [], products: [], specials: [], staff: [], vouchers: [], refunds: [] });
-            return;
-        }
-
-        const errors = [
+    const loading = !isSessionReady || salesLive.isLoading || productsLive.isLoading || specialsLive.isLoading || staffLive.isLoading || vouchersLive.isLoading || refundsLive.isLoading;
+    const error = !user
+        ? 'Please log in to view reports.'
+        : [
             salesLive.error,
             productsLive.error,
             specialsLive.error,
             staffLive.error,
             vouchersLive.error,
             refundsLive.error,
-        ].filter(Boolean);
-        if (errors.length > 0) {
-            setError(`Failed to fetch report data: ${errors[0].message}`);
-        } else {
-            setError('');
-        }
+        ].find(Boolean)?.message || '';
 
-        setMasterData({
-            sales: salesLive.data,
-            products: productsLive.data,
-            specials: specialsLive.data,
-            staff: staffLive.data,
-            vouchers: vouchersLive.data,
-            refunds: refundsLive.data,
-        });
-
-        setLoading(
-            salesLive.isLoading ||
-            productsLive.isLoading ||
-            specialsLive.isLoading ||
-            staffLive.isLoading ||
-            vouchersLive.isLoading ||
-            refundsLive.isLoading
-        );
-    }, [
-        user,
-        isSessionReady,
-        salesLive.data,
-        salesLive.isLoading,
-        salesLive.error,
-        productsLive.data,
-        productsLive.isLoading,
-        productsLive.error,
-        specialsLive.data,
-        specialsLive.isLoading,
-        specialsLive.error,
-        staffLive.data,
-        staffLive.isLoading,
-        staffLive.error,
-        vouchersLive.data,
-        vouchersLive.isLoading,
-        vouchersLive.error,
-        refundsLive.data,
-        refundsLive.isLoading,
-        refundsLive.error,
-    ]);
-
-    // Effect to filter masterData when it, selectedStore, or dateRange changes
-    useEffect(() => {
-        setLoading(true); // Start loading indicator for filtering/processing
-
+    const filteredData = useMemo(() => {
         const startDate = getStartOfDayFromString(dateRange.start);
         const endDate = getEndOfDayFromString(dateRange.end);
 
-        const newFilteredSales = masterData.sales.filter(sale => {
-            // Assuming sale.date is a string 'YYYY-MM-DD' or Firestore Timestamp
-            let saleDate;
-            if (sale.date && sale.date.toDate) { // Firestore Timestamp
-                saleDate = sale.date.toDate();
-            } else if (typeof sale.date === 'string') { // Date string
-                saleDate = getStartOfDayFromString(sale.date); // Compare consistently
-            } else if (sale.timestamp && sale.timestamp.toDate) { // Fallback to 'timestamp' field
-                 saleDate = sale.timestamp.toDate();
-            } else if (typeof sale.timestamp === 'string') {
-                 saleDate = getStartOfDayFromString(sale.timestamp);
-            }
-             else {
-                // console.warn('Sale item missing valid date field:', sale);
-                return false; // Skip if no valid date
-            }
-            
-            const storeMatch = selectedStore === 'All stores' || sale.storeId === selectedStore;
-            const dateMatch = saleDate >= startDate && saleDate <= endDate;
-            return storeMatch && dateMatch;
+        const matchesStore = (storeId) => (
+            effectiveSelectedStore === 'All stores' || storeId === effectiveSelectedStore
+        );
+
+        const resolveDate = (item) => {
+            if (item?.date && typeof item.date.toDate === 'function') return item.date.toDate();
+            if (typeof item?.date === 'string') return getStartOfDayFromString(item.date);
+            if (item?.timestamp && typeof item.timestamp.toDate === 'function') return item.timestamp.toDate();
+            if (typeof item?.timestamp === 'string') return getStartOfDayFromString(item.timestamp);
+            return null;
+        };
+
+        const sales = masterData.sales.filter((sale) => {
+            const saleDate = resolveDate(sale);
+            if (!saleDate) return false;
+            return matchesStore(sale.storeId) && saleDate >= startDate && saleDate <= endDate;
         });
 
-        const newFilteredRefunds = masterData.refunds.filter(refund => {
-            let refundDate;
-            if (refund.date && refund.date.toDate) {
-                refundDate = refund.date.toDate();
-            } else if (typeof refund.date === 'string') {
-                refundDate = getStartOfDayFromString(refund.date);
-            } else if (refund.timestamp && refund.timestamp.toDate) { // Fallback to 'timestamp' field
-                 refundDate = refund.timestamp.toDate();
-            } else if (typeof refund.timestamp === 'string') {
-                 refundDate = getStartOfDayFromString(refund.timestamp);
-            }
-            else {
-                // console.warn('Refund item missing valid date field:', refund);
-                return false;
-            }
-
-            const storeMatch = selectedStore === 'All stores' || refund.storeId === selectedStore;
-            const dateMatch = refundDate >= startDate && refundDate <= endDate;
-            return storeMatch && dateMatch;
-        });
-        
-        setFilteredData({
-            sales: newFilteredSales,
-            refunds: newFilteredRefunds,
+        const refunds = masterData.refunds.filter((refund) => {
+            const refundDate = resolveDate(refund);
+            if (!refundDate) return false;
+            return matchesStore(refund.storeId) && refundDate >= startDate && refundDate <= endDate;
         });
 
-        // Note: The next useEffect will handle calculations with this new filteredData
-        // setLoading(false) will be managed in the calculation useEffect
-    }, [masterData, selectedStore, dateRange]);
+        return { sales, refunds };
+    }, [masterData.sales, masterData.refunds, dateRange.start, dateRange.end, effectiveSelectedStore]);
 
-
-
-    // Effect for processing data when filteredData changes
-    useEffect(() => {
-        // setLoading(true) should have been set by the filtering useEffect
-        if (filteredData.sales && filteredData.refunds) {
-            const productTotals = calculateProductPaymentTotals(filteredData.sales);
-            setSalesTotals(productTotals);
-            setPromotionsSummary(aggregatePromotionsSummary(filteredData.sales));
-            setSalesReconciliation(aggregateSalesReconciliation(filteredData.sales));
-            setSpecialsBreakdown(aggregateSpecialsBreakdown(filteredData.sales));
-            setRefundTotals(calculateRefundTotals(filteredData.refunds));
-            setStaffTotals(calculateStaffTotals(filteredData.sales));
-            setCalculatedStats(calculateAdditionalStats(filteredData.sales, filteredData.refunds));
-            setVoucherStats(calculateVoucherStats(filteredData.sales, masterData.vouchers, dateRange, selectedStore));
-        } else {
-            setSalesTotals({});
-            setPromotionsSummary({
-                specialsDiscount: 0,
-                voucherDiscount: 0,
-                totalPromotions: 0,
-                salesWithSpecials: 0,
-                transactionCount: 0,
-            });
-            setSalesReconciliation({ gross: 0, promotions: 0, net: 0, transactionCount: 0 });
-            setSpecialsBreakdown([]);
-            setRefundTotals([]); setStaffTotals([]);
-            setCalculatedStats({ /* initial empty stats */ });
-            setVoucherStats({ /* initial empty voucher stats */ });
-        }
-        setLoading(false); // All data fetching, filtering, and calculations are done
-    }, [filteredData, calculateProductPaymentTotals, calculateRefundTotals, calculateStaffTotals, calculateAdditionalStats, calculateVoucherStats, masterData.vouchers]);
-
+    const salesTotals = useMemo(
+        () => calculateProductPaymentTotals(filteredData.sales),
+        [filteredData.sales]
+    );
+    const salesReconciliation = useMemo(
+        () => aggregateSalesReconciliation(filteredData.sales),
+        [filteredData.sales]
+    );
+    const specialsBreakdown = useMemo(
+        () => aggregateSpecialsBreakdown(filteredData.sales),
+        [filteredData.sales]
+    );
+    const refundTotals = useMemo(
+        () => calculateRefundTotals(filteredData.refunds),
+        [filteredData.refunds]
+    );
+    const staffTotals = useMemo(
+        () => calculateStaffTotals(filteredData.sales),
+        [filteredData.sales]
+    );
+    const calculatedStats = useMemo(
+        () => calculateAdditionalStats(filteredData.sales, filteredData.refunds),
+        [filteredData.sales, filteredData.refunds]
+    );
+    const voucherStats = useMemo(
+        () => calculateVoucherStats(filteredData.sales, masterData.vouchers, dateRange, effectiveSelectedStore),
+        [filteredData.sales, masterData.vouchers, dateRange, effectiveSelectedStore]
+    );
 
     const handleStoreChange = (e) => setSelectedStore(e.target.value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
@@ -611,24 +481,12 @@ export default function Reports() {
 
     };
 
-    
-    useEffect(() => {
-        // Only animate if this isn't the first load
-        if (prevMasterDataRef.current && prevMasterDataRef.current !== masterData) {
-            setLiveUpdate(true);
-            const timeout = setTimeout(() => setLiveUpdate(false), 600); // Animation duration
-            return () => clearTimeout(timeout);
-        }
-        prevMasterDataRef.current = masterData;
-    }, [masterData]);
-
     return (
         <RouteGuard requiredRoles={['manager', 'staff']}>
-            <div className="min-h-screen bg-neutral-900 p-4 md:p-8">
-                <div className="">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/40 p-3 text-neutral-50 md:p-4">
+                <div className="mb-3 rounded-2xl border border-white/10 bg-neutral-900/70 p-4 shadow-lg backdrop-blur-xl md:p-6">
 
-                    <div className="bg-neutral-800 p-6 rounded-lg shadow-lg mb-8">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div className="grid grid-cols-1 gap-4 items-end md:grid-cols-3">
                             {staffAuth?.accountType === 'manager' ? (
                                 <div>
                                     <label htmlFor="storeSelect" className="block text-sm font-medium text-neutral-300 mb-1">Select Store</label>
@@ -636,7 +494,7 @@ export default function Reports() {
                                         id="storeSelect"
                                         value={selectedStore}
                                         onChange={handleStoreChange}
-                                        className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500"
+                                        className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
                                     >
                                         <option value="All stores">All stores</option>
                                         {stores.map(store => (
@@ -647,23 +505,23 @@ export default function Reports() {
                             ) : staffAuth?.accountType === 'staff' ? (
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-300 mb-1">Store</label>
-                                    <div className="w-full p-2 bg-neutral-700 rounded text-white">
+                                    <div className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white">
                                         {stores.find(store => store.id === user?.email)?.name || user?.email || 'Loading...'}
                                     </div>
                                 </div>
                             ) : null}
                             <div>
                                 <label htmlFor="startDate" className="block text-sm font-medium text-neutral-300 mb-1">Start Date</label>
-                                <input id="startDate" type="date" value={dateRange.start} onChange={(e) => handleDateChange(e, 'start')} className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500" />
+                                <input id="startDate" type="date" value={dateRange.start} onChange={(e) => handleDateChange(e, 'start')} className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
                             </div>
                             <div>
                                 <label htmlFor="endDate" className="block text-sm font-medium text-neutral-300 mb-1">End Date</label>
-                                <input id="endDate" type="date" value={dateRange.end} onChange={(e) => handleDateChange(e, 'end')} className="w-full p-2 bg-neutral-700 rounded text-white focus:ring-green-500 focus:border-green-500" />
+                                <input id="endDate" type="date" value={dateRange.end} onChange={(e) => handleDateChange(e, 'end')} className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
                             </div>
                             <div className="">
                                     <button
                                         onClick={handleExportToPdf}
-                                        className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+                                        className="min-h-11 rounded-xl bg-green-600 px-6 py-2 font-semibold text-white shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
                                         disabled={loading} // Disable if data is still loading
                                     >
                                         {loading ? 'Generating...' : 'Export to PDF'}
@@ -674,16 +532,15 @@ export default function Reports() {
                         {loading && (<div className="mt-4 p-3 bg-blue-600/30 border border-blue-500 rounded text-white text-sm">Loading and processing data... Please wait.</div>)}
                     </div>
                     
+                <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/70 shadow-lg backdrop-blur-xl">
                     {!loading && !error && (
                         <div
                             id="report-content"
-                            className={`p-2 sm:p-4 md:p-6 bg-neutral-800 rounded-lg shadow-lg transition-all duration-500 ${
-                                liveUpdate ? 'ring-4 ring-green-500/40 animate-pulse' : ''
-                            }`}
+                            className="h-full min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6"
                         >
                             <h2 className="text-lg sm:text-xl font-bold text-white mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
                                 Analysis Report:
-                                <span className="rounded-lg bg-neutral-900 px-2 py-1 text-green-500 text-base sm:text-lg">{stores.find(s => s.id === selectedStore)?.name || selectedStore}</span>
+                                <span className="rounded-lg bg-neutral-900 px-2 py-1 text-green-500 text-base sm:text-lg">{stores.find(s => s.id === effectiveSelectedStore)?.name || effectiveSelectedStore}</span>
                                 <span className="text-xs sm:text-sm text-neutral-400 block sm:inline sm:ml-2">
                                     ({new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()})
                                 </span>
@@ -874,7 +731,7 @@ export default function Reports() {
                         </div>
                     )}
                     {!loading && !error && masterData.sales.length === 0 && masterData.refunds.length === 0 && (
-                         <div className="mt-6 p-4 bg-yellow-600/20 border border-yellow-500 rounded text-white text-center">
+                         <div className="m-4 rounded-xl border border-yellow-500 bg-yellow-600/20 p-4 text-center text-white">
                             No sales or refund data available for the selected criteria after filtering.
                         </div>
                     )}
