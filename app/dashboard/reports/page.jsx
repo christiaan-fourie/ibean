@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Fragment, useState, useMemo } from 'react';
 import RouteGuard from '../../components/RouteGuard';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
@@ -139,9 +139,63 @@ export default function Reports() {
         () => calculateVoucherStats(filteredData.sales, masterData.vouchers, dateRange, effectiveSelectedStore),
         [filteredData.sales, masterData.vouchers, dateRange, effectiveSelectedStore]
     );
+    const scopeStoreLabel = stores.find((s) => s.id === effectiveSelectedStore)?.name || effectiveSelectedStore;
+    const formatTransactionItem = (item) => {
+        const quantity = Number(item?.quantity) || 1;
+        const baseName = item?.name || item?.productName || 'Item';
+        const variant = item?.size || item?.variety || item?.selectedVariety || '';
+        const label = variant ? `${baseName} (${variant})` : baseName;
+        const lineTotal = Number(item?.subtotal ?? (Number(item?.price) || 0) * quantity);
+
+        return {
+            quantity,
+            label,
+            lineTotal,
+        };
+    };
+
+    const getTransactionItems = (sale) => (Array.isArray(sale?.items) ? sale.items.map(formatTransactionItem) : []);
+
+    const transactionHistory = useMemo(() => {
+        const resolveDate = (item) => {
+            if (item?.date && typeof item.date.toDate === 'function') return item.date.toDate();
+            if (typeof item?.date === 'string') return getStartOfDayFromString(item.date);
+            if (item?.timestamp && typeof item.timestamp.toDate === 'function') return item.timestamp.toDate();
+            if (typeof item?.timestamp === 'string') return getStartOfDayFromString(item.timestamp);
+            return null;
+        };
+
+        return [...filteredData.sales]
+            .map((sale) => ({
+                ...sale,
+                resolvedDate: resolveDate(sale),
+                itemCount: Array.isArray(sale.items)
+                    ? sale.items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
+                    : 0,
+            }))
+            .sort((a, b) => (b.resolvedDate?.getTime?.() || 0) - (a.resolvedDate?.getTime?.() || 0));
+    }, [filteredData.sales]);
 
     const handleStoreChange = (e) => setSelectedStore(e.target.value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
+    const applyPreset = (preset) => {
+        const today = new Date();
+        const end = new Date(today);
+        const start = new Date(today);
+
+        if (preset === 'today') {
+            // start/end already point to today
+        } else if (preset === '7d') {
+            start.setDate(today.getDate() - 6);
+        } else if (preset === 'mtd') {
+            start.setDate(1);
+        }
+
+        setDateRange({
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0],
+        });
+    };
     
     // Enhanced PDF Styles
     const styles = StyleSheet.create({
@@ -356,6 +410,50 @@ export default function Reports() {
                         </>
                     )}
 
+                    <Text style={styles.sectionHeader}>Transaction History</Text>
+                    <Text style={styles.description}>
+                        {transactionHistory.length} transactions in the selected scope.
+                    </Text>
+                    <View style={styles.table}>
+                        <View style={styles.tableRow}>
+                            <Text style={styles.tableCellHeader}>Date / Time</Text>
+                            <Text style={styles.tableCellHeader}>Staff</Text>
+                            <Text style={styles.tableCellHeader}>Method</Text>
+                            <Text style={styles.tableCellHeader}>Items</Text>
+                            <Text style={styles.tableCellHeader}>Total</Text>
+                        </View>
+                        {transactionHistory.map((sale, index) => (
+                            <Fragment key={sale.id || index}>
+                                <View style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
+                                    <Text style={styles.tableCell}>
+                                        {sale.resolvedDate ? sale.resolvedDate.toLocaleString('en-ZA') : '--'}
+                                    </Text>
+                                    <Text style={styles.tableCell}>{sale.staffName || sale.createdBy?.name || 'Unknown'}</Text>
+                                    <Text style={styles.tableCell}>{sale.payment?.method || 'unknown'}</Text>
+                                    <Text style={styles.tableCell}>{sale.itemCount}</Text>
+                                    <Text style={styles.highlightCell}>R {Number(sale.total || 0).toFixed(2)}</Text>
+                                </View>
+                                <View style={styles.tableRowAlternate}>
+                                    <Text style={[styles.tableCell, { flex: 1, borderRightWidth: 0, color: '#374151' }]}>
+                                        {(() => {
+                                            const items = getTransactionItems(sale);
+                                            return items.length > 0 ? (
+                                                <>
+                                                    <Text style={{ fontWeight: 'bold', color: '#111827' }}>Items: </Text>
+                                                    {items
+                                                        .map((item) => `${item.quantity}x ${item.label} - R ${item.lineTotal.toFixed(2)}`)
+                                                        .join('  ·  ')}
+                                                </>
+                                            ) : (
+                                                'Items: No items recorded'
+                                            );
+                                        })()}
+                                    </Text>
+                                </View>
+                            </Fragment>
+                        ))}
+                    </View>
+
                     <Text style={styles.sectionHeader}>Product Sales (gross line subtotals)</Text>
                     <Text style={styles.description}>
                         Menu-value totals from items sold (ZAR, before promotions). Product table: R {sumAggregateProductTotals(salesTotals).toFixed(2)} · Gross reconciliation: R {salesReconciliation.gross.toFixed(2)} · Net after promotions: R {salesReconciliation.net.toFixed(2)}.
@@ -483,97 +581,205 @@ export default function Reports() {
 
     return (
         <RouteGuard requiredRoles={['manager', 'staff']}>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/40 p-3 text-neutral-50 md:p-4">
-                <div className="mb-3 rounded-2xl border border-white/10 bg-neutral-900/70 p-4 shadow-lg backdrop-blur-xl md:p-6">
-
-                    <div className="grid grid-cols-1 gap-4 items-end md:grid-cols-3">
-                            {staffAuth?.accountType === 'manager' ? (
-                                <div>
-                                    <label htmlFor="storeSelect" className="block text-sm font-medium text-neutral-300 mb-1">Select Store</label>
-                                    <select
-                                        id="storeSelect"
-                                        value={selectedStore}
-                                        onChange={handleStoreChange}
-                                        className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
-                                    >
-                                        <option value="All stores">All stores</option>
-                                        {stores.map(store => (
-                                            <option key={store.id} value={store.id}>{store.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            ) : staffAuth?.accountType === 'staff' ? (
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-300 mb-1">Store</label>
-                                    <div className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white">
-                                        {stores.find(store => store.id === user?.email)?.name || user?.email || 'Loading...'}
+            <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/35 p-3 text-neutral-50 md:p-4">
+                <div className="mb-3 rounded-3xl border border-white/10 bg-neutral-900/60 p-4 shadow-xl backdrop-blur-2xl md:p-6">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+                        <section className="rounded-3xl border border-white/10 bg-white/5 p-3 shadow-lg shadow-black/10">
+                            <div className="mb-3">
+                                <h2 className="text-base font-semibold text-white">Filters</h2>
+                                <p className="text-xs text-neutral-400">Choose the store and time window for this report.</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                {staffAuth?.accountType === 'manager' ? (
+                                    <div>
+                                        <label htmlFor="storeSelect" className="mb-1 block text-sm font-medium text-neutral-300">Store</label>
+                                        <select
+                                            id="storeSelect"
+                                            value={selectedStore}
+                                            onChange={handleStoreChange}
+                                            className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+                                        >
+                                            <option value="All stores">All stores</option>
+                                            {stores.map(store => (
+                                                <option key={store.id} value={store.id}>{store.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
+                                ) : staffAuth?.accountType === 'staff' ? (
+                                    <div>
+                                        <label className="mb-1 block text-sm font-medium text-neutral-300">Store</label>
+                                        <div className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white">
+                                            {stores.find(store => store.id === user?.email)?.name || user?.email || 'Loading...'}
+                                        </div>
+                                    </div>
+                                ) : null}
+                                <div>
+                                    <label htmlFor="startDate" className="mb-1 block text-sm font-medium text-neutral-300">Start Date</label>
+                                    <input id="startDate" type="date" value={dateRange.start} onChange={(e) => handleDateChange(e, 'start')} className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
                                 </div>
-                            ) : null}
-                            <div>
-                                <label htmlFor="startDate" className="block text-sm font-medium text-neutral-300 mb-1">Start Date</label>
-                                <input id="startDate" type="date" value={dateRange.start} onChange={(e) => handleDateChange(e, 'start')} className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
+                                <div>
+                                    <label htmlFor="endDate" className="mb-1 block text-sm font-medium text-neutral-300">End Date</label>
+                                    <input id="endDate" type="date" value={dateRange.end} onChange={(e) => handleDateChange(e, 'end')} className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
+                                </div>
                             </div>
-                            <div>
-                                <label htmlFor="endDate" className="block text-sm font-medium text-neutral-300 mb-1">End Date</label>
-                                <input id="endDate" type="date" value={dateRange.end} onChange={(e) => handleDateChange(e, 'end')} className="w-full rounded-xl border border-white/10 bg-white/5 p-2 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => applyPreset('today')}
+                                    className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/10"
+                                >
+                                    Today
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyPreset('7d')}
+                                    className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/10"
+                                >
+                                    7 days
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyPreset('mtd')}
+                                    className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/10"
+                                >
+                                    Month to date
+                                </button>
                             </div>
-                            <div className="">
-                                    <button
-                                        onClick={handleExportToPdf}
-                                        className="min-h-11 rounded-xl bg-green-600 px-6 py-2 font-semibold text-white shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
-                                        disabled={loading} // Disable if data is still loading
-                                    >
-                                        {loading ? 'Generating...' : 'Export to PDF'}
-                                    </button>
+                        </section>
+
+                        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-green-500/15 via-emerald-500/10 to-cyan-500/10 p-3 shadow-lg shadow-black/10">
+                            <div className="mb-3">
+                                <h2 className="text-base font-semibold text-white">Exports</h2>
+                                <p className="text-xs text-neutral-300">Exports the current store and date range as a PDF.</p>
                             </div>
-                        </div>
-                        {error && (<div className="mt-4 p-3 bg-red-600/30 border border-red-500 rounded text-white text-sm">{error}</div>)}
-                        {loading && (<div className="mt-4 p-3 bg-blue-600/30 border border-blue-500 rounded text-white text-sm">Loading and processing data... Please wait.</div>)}
+                            <div className="rounded-2xl border border-white/10 bg-neutral-900/50 p-3">
+                                <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-400">Current scope</p>
+                                <p className="mt-1 text-sm text-white">{scopeStoreLabel}</p>
+                                <p className="text-xs text-neutral-400">
+                                    {new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()}
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleExportToPdf}
+                                className="mt-3 min-h-11 w-full rounded-2xl bg-green-600 px-6 py-2 font-semibold text-white shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 disabled:cursor-not-allowed disabled:bg-neutral-600"
+                                disabled={loading}
+                            >
+                                {loading ? 'Generating...' : 'Export to PDF'}
+                            </button>
+                        </section>
+                    </div>
+                        {error && (<div className="mt-4 rounded-2xl border border-red-500/40 bg-red-600/20 p-3 text-sm text-white">{error}</div>)}
+                        {loading && (<div className="mt-4 rounded-2xl border border-blue-500/40 bg-blue-600/20 p-3 text-sm text-white">Loading and processing data... Please wait.</div>)}
                     </div>
                     
-                <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/70 shadow-lg backdrop-blur-xl">
+                <div className="min-h-0 flex-1 overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/60 shadow-xl backdrop-blur-2xl">
                     {!loading && !error && (
                         <div
                             id="report-content"
                             className="h-full min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6"
                         >
-                            <h2 className="text-lg sm:text-xl font-bold text-white mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                            <h2 className="mb-4 flex flex-col gap-2 text-lg font-semibold text-white sm:flex-row sm:items-center sm:text-xl">
                                 Analysis Report:
-                                <span className="rounded-lg bg-neutral-900 px-2 py-1 text-green-500 text-base sm:text-lg">{stores.find(s => s.id === effectiveSelectedStore)?.name || effectiveSelectedStore}</span>
-                                <span className="text-xs sm:text-sm text-neutral-400 block sm:inline sm:ml-2">
+                                <span className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-1 text-base text-green-300 shadow-sm sm:text-lg">{stores.find(s => s.id === effectiveSelectedStore)?.name || effectiveSelectedStore}</span>
+                                <span className="block text-xs text-neutral-400 sm:ml-2 sm:inline sm:text-sm">
                                     ({new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()})
                                 </span>
                             </h2>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 text-neutral-300">
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Transactions:</strong> {calculatedStats.totalTransactions}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg"><strong>Gross sales:</strong> R{salesReconciliation.gross.toFixed(2)}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg text-amber-300"><strong>Promotions:</strong> -R{salesReconciliation.promotions.toFixed(2)}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg text-green-400"><strong>Net sales:</strong> R{salesReconciliation.net.toFixed(2)}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg sm:col-span-2"><strong>Refunds:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
-                                <div className="bg-neutral-700 p-3 sm:p-4 rounded-lg sm:col-span-2 text-xs text-neutral-400">
+                            <div className="mb-6 grid grid-cols-1 gap-3 text-neutral-300 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 shadow-sm"><strong className="text-neutral-200">Transactions:</strong> {calculatedStats.totalTransactions}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 shadow-sm"><strong className="text-neutral-200">Gross sales:</strong> R{salesReconciliation.gross.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 text-amber-300 shadow-sm"><strong className="text-neutral-200">Promotions:</strong> -R{salesReconciliation.promotions.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 text-green-300 shadow-sm"><strong className="text-neutral-200">Net sales:</strong> R{salesReconciliation.net.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 sm:col-span-2 shadow-sm"><strong className="text-neutral-200">Refunds:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 text-xs text-neutral-400 shadow-sm sm:col-span-2">
                                     Net = sum of <code className="text-neutral-300">sale.total</code>. Product table = gross line subtotals; promotions are listed separately above.
                                 </div>
                             </div>
 
-                            {specialsBreakdown.length > 0 && (
-                                <div className="mb-6">
-                                    <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-amber-400">Specials applied (period)</h3>
+                            <div className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-cyan-300 sm:text-base">Transaction History</h3>
+                                <p className="px-3 pb-2 text-[11px] text-neutral-400 sm:text-xs">
+                                    {transactionHistory.length} transactions in the selected scope.
+                                </p>
+                                {transactionHistory.length > 0 ? (
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-full bg-neutral-800 border border-neutral-700 text-amber-200 text-xs sm:text-sm">
+                                        <table className="min-w-full text-[11px] text-cyan-100 sm:text-sm">
+                                            <thead className="sticky top-0 z-10">
+                                                <tr className="bg-neutral-900/70">
+                                                    <th className="px-2 py-2 text-left sm:px-4">Time</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Staff</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Method</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Items</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Total</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Store</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {transactionHistory.map((sale, index) => (
+                                                    <Fragment key={sale.id || index}>
+                                                    <tr className="border-b border-white/10 hover:bg-white/5">
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">
+                                                            {sale.resolvedDate ? sale.resolvedDate.toLocaleString('en-ZA') : '--'}
+                                                        </td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
+                                                            <div className="max-w-[11rem] truncate">{sale.staffName || sale.createdBy?.name || 'Unknown'}</div>
+                                                        </td>
+                                                        <td className="px-2 py-1.5 capitalize text-neutral-300 sm:px-4 sm:py-2">
+                                                            {sale.payment?.method || 'unknown'}
+                                                        </td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
+                                                            {sale.itemCount}
+                                                        </td>
+                                                        <td className="px-2 py-1.5 font-semibold text-cyan-200 sm:px-4 sm:py-2">
+                                                            R{Number(sale.total || 0).toFixed(2)}
+                                                        </td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
+                                                            <div className="max-w-[10rem] truncate">{stores.find((s) => s.id === sale.storeId)?.name || sale.storeId || 'Unknown store'}</div>
+                                                        </td>
+                                                    </tr>
+                                                    {(() => {
+                                                        const items = getTransactionItems(sale);
+                                                        return (
+                                                    <tr className="border-b border-white/10 bg-white/5">
+                                                        <td colSpan={6} className="px-2 py-2 text-[11px] leading-5 text-neutral-300 sm:px-4 sm:text-sm">
+                                                            <span className="font-semibold text-neutral-200">Items: </span>
+                                                            {items.length > 0
+                                                                ? items
+                                                                    .map((item) => `${item.quantity}x ${item.label} - R${item.lineTotal.toFixed(2)}`)
+                                                                    .join(' · ')
+                                                                : 'No items recorded'}
+                                                        </td>
+                                                    </tr>
+                                                        );
+                                                    })()}
+                                                    </Fragment>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <p className="p-3 text-neutral-400">No transactions found for this period/store.</p>
+                                )}
+                            </div>
+
+                            {specialsBreakdown.length > 0 && (
+                                <div className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                    <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-amber-300 sm:text-base">Specials applied (period)</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full text-[11px] text-amber-100 sm:text-sm">
                                             <thead>
-                                                <tr className="bg-neutral-700">
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Special</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Times</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Total saved</th>
+                                                <tr className="bg-neutral-900/70">
+                                                    <th className="px-2 py-2 text-left sm:px-4">Special</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Times</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Total saved</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {specialsBreakdown.map((row) => (
-                                                    <tr key={row.id} className="border-b border-neutral-700">
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{row.name}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{row.timesApplied}</td>
-                                                        <td className="px-2 sm:px-4 py-2 font-medium">R{row.totalSaved.toFixed(2)}</td>
+                                                    <tr key={row.id} className="border-b border-white/10">
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{row.name}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{row.timesApplied}</td>
+                                                        <td className="px-2 py-1.5 font-semibold text-amber-200 sm:px-4 sm:py-2">R{row.totalSaved.toFixed(2)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -583,135 +789,135 @@ export default function Reports() {
                             )}
 
                             {/* Table 1: Product Sales */}
-                            <div className="mt-6">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-green-500">Product Sales Summary (gross)</h3>
-                                <p className="px-3 pb-2 text-xs text-neutral-400 bg-neutral-900">
+                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-green-300 sm:text-base">Product Sales Summary (gross)</h3>
+                                <p className="px-3 pb-2 text-[11px] text-neutral-400 sm:text-xs">
                                     Line subtotals at menu prices (ZAR). Promotions are in the summary above — net sales R{salesReconciliation.net.toFixed(2)}. Product gross total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
                                 </p>
                                 {Object.keys(salesTotals).length > 0 ? (
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-full bg-neutral-800 border border-neutral-700 text-green-500 text-xs sm:text-sm">
+                                        <table className="min-w-full text-[11px] text-green-100 sm:text-sm">
                                             <thead className="sticky top-0 z-10">
-                                                <tr className="bg-neutral-700">
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Product</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Cash</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Card</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">SnapScan</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Other</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Total</th>
+                                                <tr className="bg-neutral-900/70">
+                                                    <th className="px-2 py-2 text-left sm:px-4">Product</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Cash</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Card</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">SnapScan</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Other</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Total</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {Object.values(salesTotals).sort((a,b) => b.Total - a.Total).map((sale, index) => (
-                                                    <tr key={index} className="border-b border-neutral-700 hover:bg-neutral-700/50">
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{sale.Product}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{sale.Cash.toFixed(2)}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{sale.Card.toFixed(2)}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{sale.Snapscan.toFixed(2)}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{sale.Other.toFixed(2)}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300 font-semibold">R{sale.Total.toFixed(2)}</td>
+                                                    <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{sale.Product}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Cash.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Card.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Snapscan.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Other.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 font-semibold text-green-200 sm:px-4 sm:py-2">R{sale.Total.toFixed(2)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-                                ) : (<p className="text-neutral-400 p-3">No product sales data for this period/store.</p>)}
+                                ) : (<p className="p-3 text-neutral-400">No product sales data for this period/store.</p>)}
                             </div>
 
                             {/* Table 2: Refunds */}
-                            <div className="mt-8">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-red-500">Refunds Issued</h3>
+                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-red-300 sm:text-base">Refunds Issued</h3>
                                 {refundTotals.length > 0 ? (
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-full bg-neutral-800 border border-neutral-700 text-red-500 text-xs sm:text-sm">
+                                        <table className="min-w-full text-[11px] text-red-100 sm:text-sm">
                                             <thead className="sticky top-0 z-10">
-                                                <tr className="bg-neutral-700">
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Staff</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Item</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Method</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Reason</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Amount</th>
+                                                <tr className="bg-neutral-900/70">
+                                                    <th className="px-2 py-2 text-left sm:px-4">Staff</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Item</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Method</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Reason</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Amount</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {refundTotals.map((refund, index) => (
-                                                    <tr key={index} className="border-b border-neutral-700 hover:bg-neutral-700/50">
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{refund.staffName}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{refund.item}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{refund.method}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{refund.reason}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{refund.amount.toFixed(2)}</td>
+                                                    <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{refund.staffName}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.item}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.method}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.reason}</td>
+                                                        <td className="px-2 py-1.5 text-red-200 sm:px-4 sm:py-2">R{refund.amount.toFixed(2)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-                                ) : (<p className="text-neutral-400 p-3">No refunds issued for this period/store.</p>)}
+                                ) : (<p className="p-3 text-neutral-400">No refunds issued for this period/store.</p>)}
                             </div>
 
                             {/* Table 3: Crew Performance */}
-                            <div className="mt-8">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-blue-400">Crew Performance</h3>
+                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-blue-300 sm:text-base">Crew Performance</h3>
                                 {staffTotals.length > 0 ? (
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-full bg-neutral-800 border border-neutral-700 text-blue-400 text-xs sm:text-sm">
+                                        <table className="min-w-full text-[11px] text-blue-100 sm:text-sm">
                                             <thead className="sticky top-0 z-10">
-                                                <tr className="bg-neutral-700">
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Staff</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Transactions</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Avg Sale</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Total Sales</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Most Sold</th>
+                                                <tr className="bg-neutral-900/70">
+                                                    <th className="px-2 py-2 text-left sm:px-4">Staff</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Transactions</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Avg Sale</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Total Sales</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Most Sold</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {staffTotals.sort((a,b) => b.total - a.total).map((staff, index) => (
-                                                    <tr key={index} className="border-b border-neutral-700 hover:bg-neutral-700/50">
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{staff.staffName}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{staff.transactions}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{staff.averageSale.toFixed(2)}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R{staff.total.toFixed(2)}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{staff.mostPopularProduct}</td>
+                                                    <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{staff.staffName}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{staff.transactions}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{staff.averageSale.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 text-blue-200 sm:px-4 sm:py-2">R{staff.total.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{staff.mostPopularProduct}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-                                ) : (<p className="text-neutral-400 p-3">No staff performance data for this period/store.</p>)}
+                                ) : (<p className="p-3 text-neutral-400">No staff performance data for this period/store.</p>)}
                             </div>
 
                             {/* Voucher Table */}
-                            <div className="mt-8">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-yellow-400">Voucher Statistics</h3>
+                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-yellow-300 sm:text-base">Voucher Statistics</h3>
                                 {Object.keys(voucherStats.voucherUsageByType).length > 0 ? (
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-full bg-neutral-800 border border-neutral-700 text-yellow-400 text-xs sm:text-sm">
+                                        <table className="min-w-full text-[11px] text-yellow-100 sm:text-sm">
                                             <thead className="sticky top-0 z-10">
-                                                <tr className="bg-neutral-700">
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Voucher Type</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Count</th>
-                                                    <th className="px-2 sm:px-4 py-2 text-left">Value</th>
+                                                <tr className="bg-neutral-900/70">
+                                                    <th className="px-2 py-2 text-left sm:px-4">Voucher Type</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Count</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4">Value</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {Object.keys(voucherStats.voucherUsageByType).map((voucherType, index) => (
-                                                    <tr key={index} className="border-b border-neutral-700 hover:bg-neutral-700/50">
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{voucherType}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">{voucherStats.voucherUsageByType[voucherType].count}</td>
-                                                        <td className="px-2 sm:px-4 py-2 text-neutral-300">R {voucherStats.voucherUsageByType[voucherType].value.toFixed(2)}</td>
+                                                    <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{voucherType}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{voucherStats.voucherUsageByType[voucherType].count}</td>
+                                                        <td className="px-2 py-1.5 text-yellow-200 sm:px-4 sm:py-2">R {voucherStats.voucherUsageByType[voucherType].value.toFixed(2)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-                                ) : (<p className="text-neutral-400 p-3">No voucher usage data for this period/store.</p>)}
+                                ) : (<p className="p-3 text-neutral-400">No voucher usage data for this period/store.</p>)}
                             </div>
 
                             {/* Additional Stats */}
-                            <div className="mt-8">
-                                <h3 className="rounded-t-lg bg-neutral-900 p-3 text-base sm:text-lg font-semibold text-purple-400">Additional Statistics</h3>
+                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-purple-300 sm:text-base">Additional Statistics</h3>
                                 {calculatedStats.totalTransactions > 0 ? (
-                                    <ul className="list-none p-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-2">
+                                    <ul className="mt-2 grid list-none grid-cols-1 gap-2.5 p-0 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
                                         {[
                                             { label: "Peak Hour", value: calculatedStats.peakHour }, { label: "Busiest Day (Value)", value: calculatedStats.bestDay },
                                             { label: "Most Used Payment", value: calculatedStats.topPaymentMethod }, { label: "Refund Rate", value: `${calculatedStats.refundRate}%` },
@@ -721,12 +927,12 @@ export default function Reports() {
                                             { label: "Most Popular Voucher Type", value: voucherStats.mostPopularVoucherType },
                                             { label: "Percent Sales with Vouchers", value: `${voucherStats.percentSalesWithVouchers}%` },
                                         ].map(stat => (
-                                            <li key={stat.label} className="bg-neutral-700 p-3 rounded-md text-xs sm:text-sm">
-                                                <span className="font-semibold text-neutral-300">{stat.label}:</span> <span className="text-purple-300">{stat.value}</span>
+                                            <li key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 p-3 text-[11px] shadow-sm sm:text-sm">
+                                                <span className="font-semibold text-neutral-200">{stat.label}:</span> <span className="text-purple-200">{stat.value}</span>
                                             </li>
                                         ))}
                                     </ul>
-                                ) : (<p className="text-neutral-400 p-3">No additional statistics for this period/store.</p>)}
+                                ) : (<p className="p-3 text-neutral-400">No additional statistics for this period/store.</p>)}
                             </div>
                         </div>
                     )}
