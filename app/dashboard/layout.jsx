@@ -10,7 +10,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import Login from "../components/Login";
 import AppLoadingScreen from "../components/AppLoadingScreen";
 import { DashboardSessionProvider } from "../components/DashboardSessionContext";
-import { AiFillHome, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload, AiOutlineHistory, AiOutlineLogout } from 'react-icons/ai'
+import { AiFillHome, AiOutlineShoppingCart, AiOutlineRollback, AiOutlineAppstore, AiOutlineUnorderedList, AiOutlineStar, AiOutlineGift, AiOutlineUser, AiOutlineDownload, AiOutlineLogout } from 'react-icons/ai'
 import { FaStoreAlt, FaClock, FaUserCircle } from "react-icons/fa";
 // Create a new StaffAuthModal component
 const StaffAuthModal = ({ storeId, onSuccess, onError }) => {
@@ -136,12 +136,6 @@ export default function RootLayout({ children }) {
             icon: AiOutlineDownload, 
             href: '/dashboard/reports',
             roles: ['manager', 'staff']
-        },
-        {
-            name: 'Sales History',
-            icon: AiOutlineHistory,
-            href: '/dashboard/sales-history',
-            roles: ['staff', 'manager']
         },
         { 
             name: 'Account', 

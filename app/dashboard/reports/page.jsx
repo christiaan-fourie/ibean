@@ -51,6 +51,7 @@ export default function Reports() {
     const stores = CHILLZONE_STORES;
 
     const [selectedStore, setSelectedStore] = useState('All stores');
+    const [expandedTransactions, setExpandedTransactions] = useState([]);
     const effectiveSelectedStore = staffAuth?.accountType === 'staff' ? (user?.email || 'All stores') : selectedStore;
     const masterData = useMemo(() => ({
         sales: salesLive.data,
@@ -155,6 +156,16 @@ export default function Reports() {
     };
 
     const getTransactionItems = (sale) => (Array.isArray(sale?.items) ? sale.items.map(formatTransactionItem) : []);
+    const getTransactionKey = (sale, index) => sale.id || sale.orderNumber || `${sale.storeId || 'store'}-${sale.resolvedDate?.getTime?.() || index}`;
+    const toggleTransactionItems = (sale, index) => {
+        const key = getTransactionKey(sale, index);
+        setExpandedTransactions((current) => (
+            current.includes(key)
+                ? current.filter((entry) => entry !== key)
+                : [...current, key]
+        ));
+    };
+    const isTransactionExpanded = (sale, index) => expandedTransactions.includes(getTransactionKey(sale, index));
 
     const transactionHistory = useMemo(() => {
         const resolveDate = (item) => {
@@ -728,7 +739,16 @@ export default function Reports() {
                                                             {sale.payment?.method || 'unknown'}
                                                         </td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
-                                                            {sale.itemCount}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleTransactionItems(sale, index)}
+                                                                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-neutral-100 transition hover:bg-white/10 sm:text-xs"
+                                                                aria-expanded={isTransactionExpanded(sale, index)}
+                                                                aria-label={`${isTransactionExpanded(sale, index) ? 'Collapse' : 'Expand'} items for transaction`}
+                                                            >
+                                                                <span>{sale.itemCount} items</span>
+                                                                <span className={`transition-transform ${isTransactionExpanded(sale, index) ? 'rotate-180' : ''}`}>v</span>
+                                                            </button>
                                                         </td>
                                                         <td className="px-2 py-1.5 font-semibold text-cyan-200 sm:px-4 sm:py-2">
                                                             R{Number(sale.total || 0).toFixed(2)}
@@ -737,21 +757,31 @@ export default function Reports() {
                                                             <div className="max-w-[10rem] truncate">{stores.find((s) => s.id === sale.storeId)?.name || sale.storeId || 'Unknown store'}</div>
                                                         </td>
                                                     </tr>
-                                                    {(() => {
-                                                        const items = getTransactionItems(sale);
-                                                        return (
-                                                    <tr className="border-b border-white/10 bg-white/5">
-                                                        <td colSpan={6} className="px-2 py-2 text-[11px] leading-5 text-neutral-300 sm:px-4 sm:text-sm">
-                                                            <span className="font-semibold text-neutral-200">Items: </span>
-                                                            {items.length > 0
-                                                                ? items
-                                                                    .map((item) => `${item.quantity}x ${item.label} - R${item.lineTotal.toFixed(2)}`)
-                                                                    .join(' · ')
-                                                                : 'No items recorded'}
-                                                        </td>
-                                                    </tr>
-                                                        );
-                                                    })()}
+                                                    {isTransactionExpanded(sale, index) && (
+                                                        <tr className="border-b border-white/10 bg-white/5">
+                                                            <td colSpan={6} className="px-2 py-2 sm:px-4">
+                                                                <div className="flex flex-wrap gap-2 text-[11px] text-neutral-300 sm:text-sm">
+                                                                    {getTransactionItems(sale).length > 0 ? (
+                                                                        getTransactionItems(sale).map((item, itemIndex) => (
+                                                                            <span
+                                                                                key={`${sale.id || index}-item-${itemIndex}`}
+                                                                                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/60 px-3 py-1.5"
+                                                                            >
+                                                                                <span className="font-medium text-neutral-100">
+                                                                                    {item.quantity}x {item.label}
+                                                                                </span>
+                                                                                <span className="text-neutral-400">R{item.lineTotal.toFixed(2)}</span>
+                                                                            </span>
+                                                                        ))
+                                                                    ) : (
+                                                                        <span className="rounded-full border border-white/10 bg-neutral-900/60 px-3 py-1.5 text-neutral-400">
+                                                                            No items recorded
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
                                                     </Fragment>
                                                 ))}
                                             </tbody>
