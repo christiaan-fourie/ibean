@@ -1,9 +1,54 @@
 import { aggregateProductPaymentTotals } from './pricing/aggregateSales';
-import { getSaleNetTotal } from './pricing/saleAmounts';
+import { allocateNetToLineItems, getSaleNetTotal } from './pricing/saleAmounts';
+
+function paymentBucket(method) {
+    const normalized = (method || 'unknown').toLowerCase();
+    if (normalized === 'cash') return 'Cash';
+    if (normalized === 'card') return 'Card';
+    if (normalized === 'snapscan') return 'Snapscan';
+    return 'Other';
+}
 
 /** Gross revenue per product (line subtotals in ZAR). See utils/pricing. */
 export function calculateProductPaymentTotals(salesData) {
     return aggregateProductPaymentTotals(salesData);
+}
+
+/** Net revenue per product, allocated pro-rata from each sale total. */
+export function calculateProductNetTotals(salesData) {
+    const productTotals = {};
+
+    for (const sale of salesData || []) {
+        const bucket = paymentBucket(sale.payment?.method);
+        const allocatedLines = allocateNetToLineItems(sale);
+
+        for (const line of allocatedLines) {
+            const name = line.name || 'Unknown Product';
+            const net = line.net || 0;
+            if (!productTotals[name]) {
+                productTotals[name] = {
+                    Product: name,
+                    Cash: 0,
+                    Card: 0,
+                    Snapscan: 0,
+                    Other: 0,
+                    Total: 0,
+                };
+            }
+            productTotals[name][bucket] += net;
+            productTotals[name].Total += net;
+        }
+    }
+
+    Object.values(productTotals).forEach((row) => {
+        row.Cash = Number(row.Cash.toFixed(2));
+        row.Card = Number(row.Card.toFixed(2));
+        row.Snapscan = Number(row.Snapscan.toFixed(2));
+        row.Other = Number(row.Other.toFixed(2));
+        row.Total = Number(row.Total.toFixed(2));
+    });
+
+    return productTotals;
 }
 
 export function calculateRefundTotals(refundData) {

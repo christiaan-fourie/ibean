@@ -5,7 +5,7 @@ import RouteGuard from '../../components/RouteGuard';
 import { useDashboardSession } from '../../components/DashboardSessionContext';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import {
-    calculateProductPaymentTotals,
+    calculateProductNetTotals,
     calculateRefundTotals,
     calculateStaffTotals,
     calculateVoucherStats,
@@ -18,6 +18,16 @@ import {
 } from '../../../utils/pricing';
 import { CHILLZONE_STORES } from '../../../utils/stores';
 import { buildReportsPdfBlob } from './reportPdf';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 // Helper to get the start of a day from a YYYY-MM-DD string
 const getStartOfDayFromString = (dateString) => {
@@ -48,6 +58,47 @@ const formatTransactionItem = (item) => {
 
 const getTransactionItems = (sale) => (Array.isArray(sale?.items) ? sale.items.map(formatTransactionItem) : []);
 
+const sortRows = (rows, tableKey, sortKey, direction, accessors) => {
+    const accessor = accessors[tableKey]?.[sortKey];
+    if (!accessor) return rows;
+
+    const factor = direction === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+        const aValue = accessor(a);
+        const bValue = accessor(b);
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+            return (aValue - bValue) * factor;
+        }
+
+        return String(aValue ?? '').localeCompare(String(bValue ?? ''), 'en', {
+            numeric: true,
+            sensitivity: 'base',
+        }) * factor;
+    });
+};
+
+const TableHeader = ({ children, sortState, sortKey, tableKey, onSort, defaultDirection = 'asc', className = '' }) => {
+    const isActive = sortState?.key === sortKey;
+    const Icon = !isActive
+        ? ArrowUpDown
+        : sortState.direction === 'asc'
+            ? ArrowUp
+            : ArrowDown;
+
+    return (
+        <button
+            type="button"
+            onClick={() => onSort(tableKey, sortKey, defaultDirection)}
+            className={`inline-flex items-center gap-1.5 text-left transition hover:text-white ${className}`.trim()}
+            aria-label={`Sort by ${children}`}
+        >
+            <span>{children}</span>
+            <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-cyan-300' : 'text-neutral-500'}`} aria-hidden="true" />
+        </button>
+    );
+};
+
 
 
 export default function Reports() {
@@ -67,6 +118,14 @@ export default function Reports() {
 
     const [selectedStore, setSelectedStore] = useState('All stores');
     const [expandedTransactions, setExpandedTransactions] = useState([]);
+    const [tableSorts, setTableSorts] = useState({
+        transactions: { key: 'resolvedDate', direction: 'desc' },
+        specials: { key: 'totalSaved', direction: 'desc' },
+        products: { key: 'Total', direction: 'desc' },
+        refunds: { key: 'amount', direction: 'desc' },
+        crew: { key: 'total', direction: 'desc' },
+        vouchers: { key: 'count', direction: 'desc' },
+    });
     const effectiveSelectedStore = staffAuth?.accountType === 'staff' ? (user?.email || 'All stores') : selectedStore;
     const masterData = useMemo(() => ({
         sales: salesLive.data,
@@ -128,7 +187,7 @@ export default function Reports() {
     }, [masterData.sales, masterData.refunds, dateRange.start, dateRange.end, effectiveSelectedStore]);
 
     const salesTotals = useMemo(
-        () => calculateProductPaymentTotals(filteredData.sales),
+        () => calculateProductNetTotals(filteredData.sales),
         [filteredData.sales]
     );
     const salesReconciliation = useMemo(
@@ -166,6 +225,29 @@ export default function Reports() {
         ));
     };
     const isTransactionExpanded = (sale, index) => expandedTransactions.includes(getTransactionKey(sale, index));
+    const handleTableSort = (tableKey, sortKey, defaultDirection = 'asc') => {
+        setTableSorts((current) => {
+            const tableState = current[tableKey] || { key: sortKey, direction: defaultDirection };
+
+            if (tableState.key === sortKey) {
+                return {
+                    ...current,
+                    [tableKey]: {
+                        key: sortKey,
+                        direction: tableState.direction === 'asc' ? 'desc' : 'asc',
+                    },
+                };
+            }
+
+            return {
+                ...current,
+                [tableKey]: {
+                    key: sortKey,
+                    direction: defaultDirection,
+                },
+            };
+        });
+    };
 
     const transactionHistory = useMemo(() => {
         const resolveDate = (item) => {
@@ -180,46 +262,170 @@ export default function Reports() {
             .map((sale) => ({
                 ...sale,
                 resolvedDate: resolveDate(sale),
+                paymentMethod: sale.payment?.method || 'unknown',
+                storeName: stores.find((store) => store.id === sale.storeId)?.name || sale.storeId || 'Unknown store',
                 itemCount: Array.isArray(sale.items)
                     ? sale.items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
                     : 0,
                 pdfItems: getTransactionItems(sale),
             }))
-            .sort((a, b) => (b.resolvedDate?.getTime?.() || 0) - (a.resolvedDate?.getTime?.() || 0));
-    }, [filteredData.sales]);
+    }, [filteredData.sales, stores]);
 
-    const productRows = useMemo(
-        () => Object.values(salesTotals).sort((a, b) => b.Total - a.Total),
-        [salesTotals]
+    const productRows = useMemo(() => Object.values(salesTotals), [salesTotals]);
+
+    const specialsRows = useMemo(() => [...specialsBreakdown], [specialsBreakdown]);
+    const refundRows = useMemo(() => [...refundTotals], [refundTotals]);
+    const crewRows = useMemo(() => [...staffTotals], [staffTotals]);
+    const voucherRows = useMemo(
+        () => Object.entries(voucherStats.voucherUsageByType).map(([voucherType, row]) => ({
+            voucherType,
+            count: row.count,
+            value: row.value,
+        })),
+        [voucherStats.voucherUsageByType]
+    );
+
+    const sortedTransactionHistory = useMemo(
+        () => sortRows(
+            transactionHistory,
+            'transactions',
+            tableSorts.transactions.key,
+            tableSorts.transactions.direction,
+            {
+                transactions: {
+                    resolvedDate: (row) => row.resolvedDate?.getTime?.() || 0,
+                    staffName: (row) => row.staffName || row.createdBy?.name || 'Unknown',
+                    paymentMethod: (row) => row.paymentMethod || 'unknown',
+                    itemCount: (row) => row.itemCount || 0,
+                    total: (row) => row.total || 0,
+                    storeName: (row) => row.storeName || 'Unknown store',
+                },
+            }
+        ),
+        [tableSorts.transactions, transactionHistory]
+    );
+
+    const sortedSpecialsRows = useMemo(
+        () => sortRows(
+            specialsRows,
+            'specials',
+            tableSorts.specials.key,
+            tableSorts.specials.direction,
+            {
+                specials: {
+                    name: (row) => row.name || '',
+                    timesApplied: (row) => row.timesApplied || 0,
+                    totalSaved: (row) => row.totalSaved || 0,
+                },
+            }
+        ),
+        [specialsRows, tableSorts.specials]
+    );
+
+    const sortedProductRows = useMemo(
+        () => sortRows(
+            productRows,
+            'products',
+            tableSorts.products.key,
+            tableSorts.products.direction,
+            {
+                products: {
+                    Product: (row) => row.Product || '',
+                    Cash: (row) => row.Cash || 0,
+                    Card: (row) => row.Card || 0,
+                    Snapscan: (row) => row.Snapscan || 0,
+                    Other: (row) => row.Other || 0,
+                    Total: (row) => row.Total || 0,
+                },
+            }
+        ),
+        [productRows, tableSorts.products]
+    );
+
+    const sortedRefundRows = useMemo(
+        () => sortRows(
+            refundRows,
+            'refunds',
+            tableSorts.refunds.key,
+            tableSorts.refunds.direction,
+            {
+                refunds: {
+                    staffName: (row) => row.staffName || '',
+                    item: (row) => row.item || '',
+                    method: (row) => row.method || '',
+                    reason: (row) => row.reason || '',
+                    amount: (row) => row.amount || 0,
+                },
+            }
+        ),
+        [refundRows, tableSorts.refunds]
+    );
+
+    const sortedCrewRows = useMemo(
+        () => sortRows(
+            crewRows,
+            'crew',
+            tableSorts.crew.key,
+            tableSorts.crew.direction,
+            {
+                crew: {
+                    staffName: (row) => row.staffName || '',
+                    transactions: (row) => row.transactions || 0,
+                    averageSale: (row) => row.averageSale || 0,
+                    total: (row) => row.total || 0,
+                    mostPopularProduct: (row) => row.mostPopularProduct || '',
+                },
+            }
+        ),
+        [crewRows, tableSorts.crew]
+    );
+
+    const sortedVoucherRows = useMemo(
+        () => sortRows(
+            voucherRows,
+            'vouchers',
+            tableSorts.vouchers.key,
+            tableSorts.vouchers.direction,
+            {
+                vouchers: {
+                    voucherType: (row) => row.voucherType || '',
+                    count: (row) => row.count || 0,
+                    value: (row) => row.value || 0,
+                },
+            }
+        ),
+        [tableSorts.vouchers, voucherRows]
     );
 
     const reportSnapshot = useMemo(() => ({
         scopeStoreLabel,
         dateRange,
         salesReconciliation,
-        specialsBreakdown,
-        transactionHistory,
-        productRows,
+        specialsBreakdown: sortedSpecialsRows,
+        transactionHistory: sortedTransactionHistory,
+        productRows: sortedProductRows,
         productTotalsSum: sumAggregateProductTotals(salesTotals),
-        refundTotals,
-        staffTotals,
+        refundTotals: sortedRefundRows,
+        staffTotals: sortedCrewRows,
         voucherStats,
+        voucherRows: sortedVoucherRows,
         calculatedStats,
     }), [
         calculatedStats,
         dateRange,
-        productRows,
-        refundTotals,
+        sortedCrewRows,
+        sortedProductRows,
+        sortedRefundRows,
         salesReconciliation,
         salesTotals,
         scopeStoreLabel,
-        specialsBreakdown,
-        staffTotals,
-        transactionHistory,
+        sortedTransactionHistory,
         voucherStats,
+        sortedVoucherRows,
+        sortedSpecialsRows,
     ]);
 
-    const handleStoreChange = (e) => setSelectedStore(e.target.value);
+    const handleStoreChange = (value) => setSelectedStore(value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
     const applyPreset = (preset) => {
         const today = new Date();
@@ -267,57 +473,79 @@ export default function Reports() {
                                 {staffAuth?.accountType === 'manager' ? (
                                     <div>
                                         <label htmlFor="storeSelect" className="mb-1 block text-sm font-medium text-neutral-300">Store</label>
-                                        <select
-                                            id="storeSelect"
-                                            value={selectedStore}
-                                            onChange={handleStoreChange}
-                                            className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
-                                        >
-                                            <option value="All stores">All stores</option>
-                                            {stores.map(store => (
-                                                <option key={store.id} value={store.id}>{store.name}</option>
-                                            ))}
-                                        </select>
+                                        <Select value={selectedStore} onValueChange={handleStoreChange}>
+                                            <SelectTrigger id="storeSelect" className="h-11 rounded-2xl border-white/10 bg-neutral-900/80 text-white">
+                                                <SelectValue placeholder="Select store" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="All stores">All stores</SelectItem>
+                                                {stores.map((store) => (
+                                                    <SelectItem key={store.id} value={store.id}>
+                                                        {store.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 ) : staffAuth?.accountType === 'staff' ? (
                                     <div>
                                         <label className="mb-1 block text-sm font-medium text-neutral-300">Store</label>
-                                        <div className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white">
-                                            {stores.find(store => store.id === user?.email)?.name || user?.email || 'Loading...'}
-                                        </div>
+                                        <Input
+                                            readOnly
+                                            value={stores.find(store => store.id === user?.email)?.name || user?.email || 'Loading...'}
+                                            className="h-11 rounded-2xl border-white/10 bg-neutral-900/80 text-white"
+                                        />
                                     </div>
                                 ) : null}
                                 <div>
-                                    <label htmlFor="startDate" className="mb-1 block text-sm font-medium text-neutral-300">Start Date</label>
-                                    <input id="startDate" type="date" value={dateRange.start} onChange={(e) => handleDateChange(e, 'start')} className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
+                                    <label htmlFor="startDate" className="mb-1 block text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-400">Start Date</label>
+                                    <Input
+                                        id="startDate"
+                                        type="date"
+                                        value={dateRange.start}
+                                        onChange={(e) => handleDateChange(e, 'start')}
+                                        className="h-12 rounded-3xl border-white/10 bg-neutral-950/70 px-4 text-sm text-white shadow-inner shadow-black/20 placeholder:text-neutral-500 focus-visible:border-cyan-400/40 focus-visible:ring-cyan-400/20"
+                                    />
                                 </div>
                                 <div>
-                                    <label htmlFor="endDate" className="mb-1 block text-sm font-medium text-neutral-300">End Date</label>
-                                    <input id="endDate" type="date" value={dateRange.end} onChange={(e) => handleDateChange(e, 'end')} className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-2.5 text-white focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" />
+                                    <label htmlFor="endDate" className="mb-1 block text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-400">End Date</label>
+                                    <Input
+                                        id="endDate"
+                                        type="date"
+                                        value={dateRange.end}
+                                        onChange={(e) => handleDateChange(e, 'end')}
+                                        className="h-12 rounded-3xl border-white/10 bg-neutral-950/70 px-4 text-sm text-white shadow-inner shadow-black/20 placeholder:text-neutral-500 focus-visible:border-cyan-400/40 focus-visible:ring-cyan-400/20"
+                                    />
                                 </div>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
-                                <button
+                                <Button
                                     type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/10 bg-neutral-900/70 text-neutral-200 hover:border-white/15 hover:bg-white/5 hover:text-white"
                                     onClick={() => applyPreset('today')}
-                                    className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/10"
                                 >
                                     Today
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                     type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/10 bg-neutral-900/70 text-neutral-200 hover:border-white/15 hover:bg-white/5 hover:text-white"
                                     onClick={() => applyPreset('7d')}
-                                    className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/10"
                                 >
                                     7 days
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                     type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/10 bg-neutral-900/70 text-neutral-200 hover:border-white/15 hover:bg-white/5 hover:text-white"
                                     onClick={() => applyPreset('mtd')}
-                                    className="rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:bg-white/10"
                                 >
                                     Month to date
-                                </button>
+                                </Button>
                             </div>
                         </section>
 
@@ -333,13 +561,13 @@ export default function Reports() {
                                     {new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()}
                                 </p>
                             </div>
-                            <button
+                            <Button
                                 onClick={handleExportToPdf}
-                                className="mt-3 min-h-11 w-full rounded-2xl bg-green-600 px-6 py-2 font-semibold text-white shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 disabled:cursor-not-allowed disabled:bg-neutral-600"
+                                className="mt-3 h-11 w-full rounded-2xl bg-green-600 text-white shadow-md hover:bg-green-700 focus-visible:ring-green-500/30"
                                 disabled={loading}
                             >
                                 {loading ? 'Generating...' : 'Export to PDF'}
-                            </button>
+                            </Button>
                         </section>
                     </div>
                         {error && (<div className="mt-4 rounded-2xl border border-red-500/40 bg-red-600/20 p-3 text-sm text-white">{error}</div>)}
@@ -359,37 +587,34 @@ export default function Reports() {
                                     ({new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()})
                                 </span>
                             </h2>
-                            <div className="mb-6 grid grid-cols-1 gap-3 text-neutral-300 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 shadow-sm"><strong className="text-neutral-200">Transactions:</strong> {calculatedStats.totalTransactions}</div>
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 shadow-sm"><strong className="text-neutral-200">Gross sales:</strong> R{salesReconciliation.gross.toFixed(2)}</div>
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 text-amber-300 shadow-sm"><strong className="text-neutral-200">Promotions:</strong> -R{salesReconciliation.promotions.toFixed(2)}</div>
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 text-green-300 shadow-sm"><strong className="text-neutral-200">Net sales:</strong> R{salesReconciliation.net.toFixed(2)}</div>
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 sm:col-span-2 shadow-sm"><strong className="text-neutral-200">Refunds:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
-                                <div className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 text-xs text-neutral-400 shadow-sm sm:col-span-2">
-                                    Net = sum of <code className="text-neutral-300">sale.total</code>. Product table = gross line subtotals; promotions are listed separately above.
-                                </div>
+                            <div className="mb-6 grid grid-cols-1 gap-3 text-neutral-300 lg:grid-cols-5 lg:gap-3">
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm leading-snug shadow-sm"><strong className="text-neutral-200">Transactions:</strong> {calculatedStats.totalTransactions}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm leading-snug shadow-sm"><strong className="text-neutral-200">Gross sales:</strong> R{salesReconciliation.gross.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm leading-snug text-amber-300 shadow-sm"><strong className="text-neutral-200">Promotions:</strong> -R{salesReconciliation.promotions.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm leading-snug text-green-300 shadow-sm"><strong className="text-neutral-200">Net sales:</strong> R{salesReconciliation.net.toFixed(2)}</div>
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm leading-snug shadow-sm"><strong className="text-neutral-200">Refunds:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
                             </div>
 
                             <div className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                                 <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-cyan-300 sm:text-base">Transaction History</h3>
                                 <p className="px-3 pb-2 text-[11px] text-neutral-400 sm:text-xs">
-                                    {transactionHistory.length} transactions in the selected scope.
+                                    {sortedTransactionHistory.length} transactions in the selected scope.
                                 </p>
-                                {transactionHistory.length > 0 ? (
+                                {sortedTransactionHistory.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-cyan-100 sm:text-sm">
                                             <thead>
                                                 <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4">Time</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Staff</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Method</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Items</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Total</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Store</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="resolvedDate" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Time</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="staffName" sortState={tableSorts.transactions} onSort={handleTableSort}>Staff</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="paymentMethod" sortState={tableSorts.transactions} onSort={handleTableSort}>Method</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="itemCount" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Items</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="total" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Total</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="storeName" sortState={tableSorts.transactions} onSort={handleTableSort}>Store</TableHeader></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {transactionHistory.map((sale, index) => (
+                                                {sortedTransactionHistory.map((sale, index) => (
                                                     <Fragment key={sale.id || index}>
                                                     <tr className="border-b border-white/10 hover:bg-white/5">
                                                         <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">
@@ -399,7 +624,7 @@ export default function Reports() {
                                                             <div className="max-w-[11rem] truncate">{sale.staffName || sale.createdBy?.name || 'Unknown'}</div>
                                                         </td>
                                                         <td className="px-2 py-1.5 capitalize text-neutral-300 sm:px-4 sm:py-2">
-                                                            {sale.payment?.method || 'unknown'}
+                                                            {sale.paymentMethod || 'unknown'}
                                                         </td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
                                                             <button
@@ -417,7 +642,7 @@ export default function Reports() {
                                                             R{Number(sale.total || 0).toFixed(2)}
                                                         </td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
-                                                            <div className="max-w-[10rem] truncate">{stores.find((s) => s.id === sale.storeId)?.name || sale.storeId || 'Unknown store'}</div>
+                                                            <div className="max-w-[10rem] truncate">{sale.storeName}</div>
                                                         </td>
                                                     </tr>
                                                     {isTransactionExpanded(sale, index) && (
@@ -455,20 +680,20 @@ export default function Reports() {
                                 )}
                             </div>
 
-                            {specialsBreakdown.length > 0 && (
+                            {sortedSpecialsRows.length > 0 && (
                                 <div className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                                     <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-amber-300 sm:text-base">Specials applied (period)</h3>
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-amber-100 sm:text-sm">
                                             <thead>
                                                 <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4">Special</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Times</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Total saved</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="name" sortState={tableSorts.specials} onSort={handleTableSort}>Special</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="timesApplied" sortState={tableSorts.specials} onSort={handleTableSort} defaultDirection="desc">Times</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="totalSaved" sortState={tableSorts.specials} onSort={handleTableSort} defaultDirection="desc">Total saved</TableHeader></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {specialsBreakdown.map((row) => (
+                                                {sortedSpecialsRows.map((row) => (
                                                     <tr key={row.id} className="border-b border-white/10">
                                                         <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{row.name}</td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{row.timesApplied}</td>
@@ -483,25 +708,25 @@ export default function Reports() {
 
                             {/* Table 1: Product Sales */}
                             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-green-300 sm:text-base">Product Sales Summary (gross)</h3>
+                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-green-300 sm:text-base">Product Sales Summary (net)</h3>
                                 <p className="px-3 pb-2 text-[11px] text-neutral-400 sm:text-xs">
-                                    Line subtotals at menu prices (ZAR). Promotions are in the summary above — net sales R{salesReconciliation.net.toFixed(2)}. Product gross total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
+                                    Allocated from sale totals, so the table sums to net sales R{salesReconciliation.net.toFixed(2)}. Net product total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
                                 </p>
-                                {Object.keys(salesTotals).length > 0 ? (
+                                {sortedProductRows.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-green-100 sm:text-sm">
                                             <thead>
                                                 <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4">Product</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Cash</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Card</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">SnapScan</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Other</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Total</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Product" sortState={tableSorts.products} onSort={handleTableSort}>Product</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Cash" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Cash</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Card" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Card</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Snapscan" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">SnapScan</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Other" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Other</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Total" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Total</TableHeader></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {Object.values(salesTotals).sort((a,b) => b.Total - a.Total).map((sale, index) => (
+                                                {sortedProductRows.map((sale, index) => (
                                                     <tr key={index} className="border-b border-white/10 hover:bg-white/5">
                                                         <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{sale.Product}</td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Cash.toFixed(2)}</td>
@@ -520,20 +745,20 @@ export default function Reports() {
                             {/* Table 2: Refunds */}
                             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                                 <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-red-300 sm:text-base">Refunds Issued</h3>
-                                {refundTotals.length > 0 ? (
+                                {sortedRefundRows.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-red-100 sm:text-sm">
                                             <thead>
                                                 <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4">Staff</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Item</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Method</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Reason</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Amount</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="staffName" sortState={tableSorts.refunds} onSort={handleTableSort}>Staff</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="item" sortState={tableSorts.refunds} onSort={handleTableSort}>Item</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="method" sortState={tableSorts.refunds} onSort={handleTableSort}>Method</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="reason" sortState={tableSorts.refunds} onSort={handleTableSort}>Reason</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="amount" sortState={tableSorts.refunds} onSort={handleTableSort} defaultDirection="desc">Amount</TableHeader></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {refundTotals.map((refund, index) => (
+                                                {sortedRefundRows.map((refund, index) => (
                                                     <tr key={index} className="border-b border-white/10 hover:bg-white/5">
                                                         <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{refund.staffName}</td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.item}</td>
@@ -551,20 +776,20 @@ export default function Reports() {
                             {/* Table 3: Crew Performance */}
                             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                                 <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-blue-300 sm:text-base">Crew Performance</h3>
-                                {staffTotals.length > 0 ? (
+                                {sortedCrewRows.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-blue-100 sm:text-sm">
                                             <thead>
                                                 <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4">Staff</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Transactions</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Avg Sale</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Total Sales</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Most Sold</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="crew" sortKey="staffName" sortState={tableSorts.crew} onSort={handleTableSort}>Staff</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="crew" sortKey="transactions" sortState={tableSorts.crew} onSort={handleTableSort} defaultDirection="desc">Transactions</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="crew" sortKey="averageSale" sortState={tableSorts.crew} onSort={handleTableSort} defaultDirection="desc">Avg Sale</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="crew" sortKey="total" sortState={tableSorts.crew} onSort={handleTableSort} defaultDirection="desc">Total Sales</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="crew" sortKey="mostPopularProduct" sortState={tableSorts.crew} onSort={handleTableSort}>Most Sold</TableHeader></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {staffTotals.sort((a,b) => b.total - a.total).map((staff, index) => (
+                                                {sortedCrewRows.map((staff, index) => (
                                                     <tr key={index} className="border-b border-white/10 hover:bg-white/5">
                                                         <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{staff.staffName}</td>
                                                         <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{staff.transactions}</td>
@@ -582,22 +807,22 @@ export default function Reports() {
                             {/* Voucher Table */}
                             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                                 <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-yellow-300 sm:text-base">Voucher Statistics</h3>
-                                {Object.keys(voucherStats.voucherUsageByType).length > 0 ? (
+                                {sortedVoucherRows.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-yellow-100 sm:text-sm">
                                             <thead>
                                                 <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4">Voucher Type</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Count</th>
-                                                    <th className="px-2 py-2 text-left sm:px-4">Value</th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="vouchers" sortKey="voucherType" sortState={tableSorts.vouchers} onSort={handleTableSort}>Voucher Type</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="vouchers" sortKey="count" sortState={tableSorts.vouchers} onSort={handleTableSort} defaultDirection="desc">Count</TableHeader></th>
+                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="vouchers" sortKey="value" sortState={tableSorts.vouchers} onSort={handleTableSort} defaultDirection="desc">Value</TableHeader></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {Object.keys(voucherStats.voucherUsageByType).map((voucherType, index) => (
+                                                {sortedVoucherRows.map((voucher, index) => (
                                                     <tr key={index} className="border-b border-white/10 hover:bg-white/5">
-                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{voucherType}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{voucherStats.voucherUsageByType[voucherType].count}</td>
-                                                        <td className="px-2 py-1.5 text-yellow-200 sm:px-4 sm:py-2">R {voucherStats.voucherUsageByType[voucherType].value.toFixed(2)}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{voucher.voucherType}</td>
+                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{voucher.count}</td>
+                                                        <td className="px-2 py-1.5 text-yellow-200 sm:px-4 sm:py-2">R {voucher.value.toFixed(2)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
