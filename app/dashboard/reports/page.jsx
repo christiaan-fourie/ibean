@@ -595,187 +595,236 @@ export default function Reports() {
                                 <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm leading-snug shadow-sm"><strong className="text-neutral-200">Refunds:</strong> R{calculatedStats.totalRefundsValue.toFixed(2)}</div>
                             </div>
 
-                            <div className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-cyan-300 sm:text-base">Transaction History</h3>
-                                <p className="px-3 pb-2 text-[11px] text-neutral-400 sm:text-xs">
-                                    {sortedTransactionHistory.length} transactions in the selected scope.
-                                </p>
-                                {sortedTransactionHistory.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full text-[11px] text-cyan-100 sm:text-sm">
-                                            <thead>
-                                                <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="resolvedDate" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Time</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="staffName" sortState={tableSorts.transactions} onSort={handleTableSort}>Staff</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="paymentMethod" sortState={tableSorts.transactions} onSort={handleTableSort}>Method</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="itemCount" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Items</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="total" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Total</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="storeName" sortState={tableSorts.transactions} onSort={handleTableSort}>Store</TableHeader></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedTransactionHistory.map((sale, index) => (
-                                                    <Fragment key={sale.id || index}>
-                                                    <tr className="border-b border-white/10 hover:bg-white/5">
-                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">
-                                                            {sale.resolvedDate ? sale.resolvedDate.toLocaleString('en-ZA') : '--'}
-                                                        </td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
-                                                            <div className="max-w-[11rem] truncate">{sale.staffName || sale.createdBy?.name || 'Unknown'}</div>
-                                                        </td>
-                                                        <td className="px-2 py-1.5 capitalize text-neutral-300 sm:px-4 sm:py-2">
-                                                            {sale.paymentMethod || 'unknown'}
-                                                        </td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleTransactionItems(sale, index)}
-                                                                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-neutral-100 transition hover:bg-white/10 sm:text-xs"
-                                                                aria-expanded={isTransactionExpanded(sale, index)}
-                                                                aria-label={`${isTransactionExpanded(sale, index) ? 'Collapse' : 'Expand'} items for transaction`}
-                                                            >
-                                                                <span>{sale.itemCount} items</span>
-                                                                <span className={`transition-transform ${isTransactionExpanded(sale, index) ? 'rotate-180' : ''}`}>v</span>
-                                                            </button>
-                                                        </td>
-                                                        <td className="px-2 py-1.5 font-semibold text-cyan-200 sm:px-4 sm:py-2">
-                                                            R{Number(sale.total || 0).toFixed(2)}
-                                                        </td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
-                                                            <div className="max-w-[10rem] truncate">{sale.storeName}</div>
-                                                        </td>
+                            <details className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5 open:shadow-lg open:shadow-black/10">
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-sm font-semibold text-cyan-300 sm:text-base [&::-webkit-details-marker]:hidden">
+                                    <span className="flex items-center gap-2">
+                                        <span>Transaction History</span>
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-neutral-300 sm:text-xs">
+                                            {sortedTransactionHistory.length}
+                                        </span>
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-400">Tap to expand</span>
+                                </summary>
+                                <div className="border-t border-white/10">
+                                    <p className="px-3 pb-2 pt-3 text-[11px] text-neutral-400 sm:text-xs">
+                                        {sortedTransactionHistory.length} transactions in the selected scope.
+                                    </p>
+                                    {sortedTransactionHistory.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-[11px] text-cyan-100 sm:text-sm">
+                                                <thead>
+                                                    <tr className="bg-neutral-900/70">
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="resolvedDate" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Time</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="staffName" sortState={tableSorts.transactions} onSort={handleTableSort}>Staff</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="paymentMethod" sortState={tableSorts.transactions} onSort={handleTableSort}>Method</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="itemCount" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Items</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="total" sortState={tableSorts.transactions} onSort={handleTableSort} defaultDirection="desc">Total</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="transactions" sortKey="storeName" sortState={tableSorts.transactions} onSort={handleTableSort}>Store</TableHeader></th>
                                                     </tr>
-                                                    {isTransactionExpanded(sale, index) && (
-                                                        <tr className="border-b border-white/10 bg-white/5">
-                                                            <td colSpan={6} className="px-2 py-2 sm:px-4">
-                                                                <div className="flex flex-wrap gap-2 text-[11px] text-neutral-300 sm:text-sm">
-                                                                    {getTransactionItems(sale).length > 0 ? (
-                                                                        getTransactionItems(sale).map((item, itemIndex) => (
-                                                                            <span
-                                                                                key={`${sale.id || index}-item-${itemIndex}`}
-                                                                                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/60 px-3 py-1.5"
-                                                                            >
-                                                                                <span className="font-medium text-neutral-100">
-                                                                                    {item.quantity}x {item.label}
-                                                                                </span>
-                                                                                <span className="text-neutral-400">R{item.lineTotal.toFixed(2)}</span>
-                                                                            </span>
-                                                                        ))
-                                                                    ) : (
-                                                                        <span className="rounded-full border border-white/10 bg-neutral-900/60 px-3 py-1.5 text-neutral-400">
-                                                                            No items recorded
-                                                                        </span>
-                                                                    )}
-                                                                </div>
+                                                </thead>
+                                                <tbody>
+                                                    {sortedTransactionHistory.map((sale, index) => (
+                                                        <Fragment key={sale.id || index}>
+                                                        <tr className="border-b border-white/10 hover:bg-white/5">
+                                                            <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">
+                                                                {sale.resolvedDate ? sale.resolvedDate.toLocaleString('en-ZA') : '--'}
+                                                            </td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
+                                                                <div className="max-w-[11rem] truncate">{sale.staffName || sale.createdBy?.name || 'Unknown'}</div>
+                                                            </td>
+                                                            <td className="px-2 py-1.5 capitalize text-neutral-300 sm:px-4 sm:py-2">
+                                                                {sale.paymentMethod || 'unknown'}
+                                                            </td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleTransactionItems(sale, index)}
+                                                                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-neutral-100 transition hover:bg-white/10 sm:text-xs"
+                                                                    aria-expanded={isTransactionExpanded(sale, index)}
+                                                                    aria-label={`${isTransactionExpanded(sale, index) ? 'Collapse' : 'Expand'} items for transaction`}
+                                                                >
+                                                                    <span>{sale.itemCount} items</span>
+                                                                    <span className={`transition-transform ${isTransactionExpanded(sale, index) ? 'rotate-180' : ''}`}>v</span>
+                                                                </button>
+                                                            </td>
+                                                            <td className="px-2 py-1.5 font-semibold text-cyan-200 sm:px-4 sm:py-2">
+                                                                R{Number(sale.total || 0).toFixed(2)}
+                                                            </td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">
+                                                                <div className="max-w-[10rem] truncate">{sale.storeName}</div>
                                                             </td>
                                                         </tr>
-                                                    )}
-                                                    </Fragment>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <p className="p-3 text-neutral-400">No transactions found for this period/store.</p>
-                                )}
-                            </div>
+                                                        {isTransactionExpanded(sale, index) && (
+                                                            <tr className="border-b border-white/10 bg-white/5">
+                                                                <td colSpan={6} className="px-2 py-2 sm:px-4">
+                                                                    <div className="flex flex-wrap gap-2 text-[11px] text-neutral-300 sm:text-sm">
+                                                                        {getTransactionItems(sale).length > 0 ? (
+                                                                            getTransactionItems(sale).map((item, itemIndex) => (
+                                                                                <span
+                                                                                    key={`${sale.id || index}-item-${itemIndex}`}
+                                                                                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/60 px-3 py-1.5"
+                                                                                >
+                                                                                    <span className="font-medium text-neutral-100">
+                                                                                        {item.label}
+                                                                                    </span>
+                                                                                    <span className="text-neutral-400">R{item.lineTotal.toFixed(2)}</span>
+                                                                                </span>
+                                                                            ))
+                                                                        ) : (
+                                                                            <span className="rounded-full border border-white/10 bg-neutral-900/60 px-3 py-1.5 text-neutral-400">
+                                                                                No items recorded
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                        </Fragment>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <p className="p-3 text-neutral-400">No transactions found for this period/store.</p>
+                                    )}
+                                </div>
+                            </details>
 
                             {sortedSpecialsRows.length > 0 && (
-                                <div className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                    <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-amber-300 sm:text-base">Specials applied (period)</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full text-[11px] text-amber-100 sm:text-sm">
-                                            <thead>
-                                                <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="name" sortState={tableSorts.specials} onSort={handleTableSort}>Special</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="timesApplied" sortState={tableSorts.specials} onSort={handleTableSort} defaultDirection="desc">Times</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="totalSaved" sortState={tableSorts.specials} onSort={handleTableSort} defaultDirection="desc">Total saved</TableHeader></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedSpecialsRows.map((row) => (
-                                                    <tr key={row.id} className="border-b border-white/10">
-                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{row.name}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{row.timesApplied}</td>
-                                                        <td className="px-2 py-1.5 font-semibold text-amber-200 sm:px-4 sm:py-2">R{row.totalSaved.toFixed(2)}</td>
+                                <details className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5 open:shadow-lg open:shadow-black/10">
+                                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-sm font-semibold text-amber-300 sm:text-base [&::-webkit-details-marker]:hidden">
+                                        <span className="flex items-center gap-2">
+                                            <span>Specials applied (period)</span>
+                                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-neutral-300 sm:text-xs">
+                                                {sortedSpecialsRows.length}
+                                            </span>
+                                        </span>
+                                        <span className="text-xs font-medium text-neutral-400">Tap to expand</span>
+                                    </summary>
+                                    <div className="border-t border-white/10">
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-[11px] text-amber-100 sm:text-sm">
+                                                <thead>
+                                                    <tr className="bg-neutral-900/70">
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="name" sortState={tableSorts.specials} onSort={handleTableSort}>Special</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="timesApplied" sortState={tableSorts.specials} onSort={handleTableSort} defaultDirection="desc">Times</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="specials" sortKey="totalSaved" sortState={tableSorts.specials} onSort={handleTableSort} defaultDirection="desc">Total saved</TableHeader></th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody>
+                                                    {sortedSpecialsRows.map((row) => (
+                                                        <tr key={row.id} className="border-b border-white/10">
+                                                            <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{row.name}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{row.timesApplied}</td>
+                                                            <td className="px-2 py-1.5 font-semibold text-amber-200 sm:px-4 sm:py-2">R{row.totalSaved.toFixed(2)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                </div>
+                                </details>
                             )}
 
                             {/* Table 1: Product Sales */}
-                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-green-300 sm:text-base">Product Sales Summary (net)</h3>
-                                <p className="px-3 pb-2 text-[11px] text-neutral-400 sm:text-xs">
-                                    Allocated from sale totals, so the table sums to net sales R{salesReconciliation.net.toFixed(2)}. Net product total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
-                                </p>
-                                {sortedProductRows.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full text-[11px] text-green-100 sm:text-sm">
-                                            <thead>
-                                                <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Product" sortState={tableSorts.products} onSort={handleTableSort}>Product</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Cash" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Cash</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Card" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Card</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Snapscan" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">SnapScan</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Other" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Other</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Total" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Total</TableHeader></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedProductRows.map((sale, index) => (
-                                                    <tr key={index} className="border-b border-white/10 hover:bg-white/5">
-                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{sale.Product}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Cash.toFixed(2)}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Card.toFixed(2)}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Snapscan.toFixed(2)}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Other.toFixed(2)}</td>
-                                                        <td className="px-2 py-1.5 font-semibold text-green-200 sm:px-4 sm:py-2">R{sale.Total.toFixed(2)}</td>
+                            <details className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5 open:shadow-lg open:shadow-black/10">
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-sm font-semibold text-green-300 sm:text-base [&::-webkit-details-marker]:hidden">
+                                    <span className="flex items-center gap-2">
+                                        <span>Product Sales Summary (net)</span>
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-neutral-300 sm:text-xs">
+                                            {sortedProductRows.length}
+                                        </span>
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-400">Tap to expand</span>
+                                </summary>
+                                <div className="border-t border-white/10">
+                                    <p className="px-3 pb-2 pt-3 text-[11px] text-neutral-400 sm:text-xs">
+                                        Allocated from sale totals, so the table sums to net sales R{salesReconciliation.net.toFixed(2)}. Net product total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
+                                    </p>
+                                    {sortedProductRows.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-[11px] text-green-100 sm:text-sm">
+                                                <thead>
+                                                    <tr className="bg-neutral-900/70">
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Product" sortState={tableSorts.products} onSort={handleTableSort}>Product</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Cash" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Cash</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Card" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Card</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Snapscan" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">SnapScan</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Other" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Other</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Total" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Total</TableHeader></th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (<p className="p-3 text-neutral-400">No product sales data for this period/store.</p>)}
-                            </div>
+                                                </thead>
+                                                <tbody>
+                                                    {sortedProductRows.map((sale, index) => (
+                                                        <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                                                            <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{sale.Product}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Cash.toFixed(2)}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Card.toFixed(2)}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Snapscan.toFixed(2)}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Other.toFixed(2)}</td>
+                                                            <td className="px-2 py-1.5 font-semibold text-green-200 sm:px-4 sm:py-2">R{sale.Total.toFixed(2)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (<p className="p-3 text-neutral-400">No product sales data for this period/store.</p>)}
+                                </div>
+                            </details>
 
                             {/* Table 2: Refunds */}
-                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-red-300 sm:text-base">Refunds Issued</h3>
-                                {sortedRefundRows.length > 0 ? (
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full text-[11px] text-red-100 sm:text-sm">
-                                            <thead>
-                                                <tr className="bg-neutral-900/70">
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="staffName" sortState={tableSorts.refunds} onSort={handleTableSort}>Staff</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="item" sortState={tableSorts.refunds} onSort={handleTableSort}>Item</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="method" sortState={tableSorts.refunds} onSort={handleTableSort}>Method</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="reason" sortState={tableSorts.refunds} onSort={handleTableSort}>Reason</TableHeader></th>
-                                                    <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="amount" sortState={tableSorts.refunds} onSort={handleTableSort} defaultDirection="desc">Amount</TableHeader></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {sortedRefundRows.map((refund, index) => (
-                                                    <tr key={index} className="border-b border-white/10 hover:bg-white/5">
-                                                        <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{refund.staffName}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.item}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.method}</td>
-                                                        <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.reason}</td>
-                                                        <td className="px-2 py-1.5 text-red-200 sm:px-4 sm:py-2">R{refund.amount.toFixed(2)}</td>
+                            <details className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5 open:shadow-lg open:shadow-black/10">
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-sm font-semibold text-red-300 sm:text-base [&::-webkit-details-marker]:hidden">
+                                    <span className="flex items-center gap-2">
+                                        <span>Refunds Issued</span>
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-neutral-300 sm:text-xs">
+                                            {sortedRefundRows.length}
+                                        </span>
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-400">Tap to expand</span>
+                                </summary>
+                                <div className="border-t border-white/10">
+                                    {sortedRefundRows.length > 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-[11px] text-red-100 sm:text-sm">
+                                                <thead>
+                                                    <tr className="bg-neutral-900/70">
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="staffName" sortState={tableSorts.refunds} onSort={handleTableSort}>Staff</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="item" sortState={tableSorts.refunds} onSort={handleTableSort}>Item</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="method" sortState={tableSorts.refunds} onSort={handleTableSort}>Method</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="reason" sortState={tableSorts.refunds} onSort={handleTableSort}>Reason</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="refunds" sortKey="amount" sortState={tableSorts.refunds} onSort={handleTableSort} defaultDirection="desc">Amount</TableHeader></th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (<p className="p-3 text-neutral-400">No refunds issued for this period/store.</p>)}
-                            </div>
+                                                </thead>
+                                                <tbody>
+                                                    {sortedRefundRows.map((refund, index) => (
+                                                        <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                                                            <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{refund.staffName}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.item}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.method}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{refund.reason}</td>
+                                                            <td className="px-2 py-1.5 text-red-200 sm:px-4 sm:py-2">R{refund.amount.toFixed(2)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (<p className="p-3 text-neutral-400">No refunds issued for this period/store.</p>)}
+                                </div>
+                            </details>
 
                             {/* Table 3: Crew Performance */}
-                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-blue-300 sm:text-base">Crew Performance</h3>
+                            <details className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5 open:shadow-lg open:shadow-black/10">
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-sm font-semibold text-blue-300 sm:text-base [&::-webkit-details-marker]:hidden">
+                                    <span className="flex items-center gap-2">
+                                        <span>Crew Performance</span>
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-neutral-300 sm:text-xs">
+                                            {sortedCrewRows.length}
+                                        </span>
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-400">Tap to expand</span>
+                                </summary>
+                                <div className="border-t border-white/10">
                                 {sortedCrewRows.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-blue-100 sm:text-sm">
@@ -802,11 +851,21 @@ export default function Reports() {
                                         </table>
                                     </div>
                                 ) : (<p className="p-3 text-neutral-400">No staff performance data for this period/store.</p>)}
-                            </div>
+                                </div>
+                            </details>
 
                             {/* Voucher Table */}
-                            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-                                <h3 className="bg-white/5 px-3 py-2.5 text-sm font-semibold text-yellow-300 sm:text-base">Voucher Statistics</h3>
+                            <details className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5 open:shadow-lg open:shadow-black/10">
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-white/5 px-3 py-2.5 text-sm font-semibold text-yellow-300 sm:text-base [&::-webkit-details-marker]:hidden">
+                                    <span className="flex items-center gap-2">
+                                        <span>Voucher Statistics</span>
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-neutral-300 sm:text-xs">
+                                            {sortedVoucherRows.length}
+                                        </span>
+                                    </span>
+                                    <span className="text-xs font-medium text-neutral-400">Tap to collapse</span>
+                                </summary>
+                                <div className="border-t border-white/10">
                                 {sortedVoucherRows.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-yellow-100 sm:text-sm">
@@ -829,7 +888,8 @@ export default function Reports() {
                                         </table>
                                     </div>
                                 ) : (<p className="p-3 text-neutral-400">No voucher usage data for this period/store.</p>)}
-                            </div>
+                                </div>
+                            </details>
 
                             {/* Additional Stats */}
                             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-white/5">
