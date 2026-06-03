@@ -17,8 +17,7 @@ import {
     sumAggregateProductTotals,
 } from '../../../utils/pricing';
 import { CHILLZONE_STORES } from '../../../utils/stores';
-
-import { pdf, Page, Text, View, Document, StyleSheet } from '@react-pdf/renderer'
+import { buildReportsPdfBlob } from './reportPdf';
 
 // Helper to get the start of a day from a YYYY-MM-DD string
 const getStartOfDayFromString = (dateString) => {
@@ -32,6 +31,22 @@ const getEndOfDayFromString = (dateString) => {
     date.setUTCHours(23, 59, 59, 999); // Use UTC
     return date;
 };
+
+const formatTransactionItem = (item) => {
+    const quantity = Number(item?.quantity) || 1;
+    const baseName = item?.name || item?.productName || 'Item';
+    const variant = item?.size || item?.variety || item?.selectedVariety || '';
+    const label = variant ? `${baseName} (${variant})` : baseName;
+    const lineTotal = Number(item?.subtotal ?? (Number(item?.price) || 0) * quantity);
+
+    return {
+        quantity,
+        label,
+        lineTotal,
+    };
+};
+
+const getTransactionItems = (sale) => (Array.isArray(sale?.items) ? sale.items.map(formatTransactionItem) : []);
 
 
 
@@ -141,21 +156,6 @@ export default function Reports() {
         [filteredData.sales, masterData.vouchers, dateRange, effectiveSelectedStore]
     );
     const scopeStoreLabel = stores.find((s) => s.id === effectiveSelectedStore)?.name || effectiveSelectedStore;
-    const formatTransactionItem = (item) => {
-        const quantity = Number(item?.quantity) || 1;
-        const baseName = item?.name || item?.productName || 'Item';
-        const variant = item?.size || item?.variety || item?.selectedVariety || '';
-        const label = variant ? `${baseName} (${variant})` : baseName;
-        const lineTotal = Number(item?.subtotal ?? (Number(item?.price) || 0) * quantity);
-
-        return {
-            quantity,
-            label,
-            lineTotal,
-        };
-    };
-
-    const getTransactionItems = (sale) => (Array.isArray(sale?.items) ? sale.items.map(formatTransactionItem) : []);
     const getTransactionKey = (sale, index) => sale.id || sale.orderNumber || `${sale.storeId || 'store'}-${sale.resolvedDate?.getTime?.() || index}`;
     const toggleTransactionItems = (sale, index) => {
         const key = getTransactionKey(sale, index);
@@ -183,9 +183,41 @@ export default function Reports() {
                 itemCount: Array.isArray(sale.items)
                     ? sale.items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0)
                     : 0,
+                pdfItems: getTransactionItems(sale),
             }))
             .sort((a, b) => (b.resolvedDate?.getTime?.() || 0) - (a.resolvedDate?.getTime?.() || 0));
     }, [filteredData.sales]);
+
+    const productRows = useMemo(
+        () => Object.values(salesTotals).sort((a, b) => b.Total - a.Total),
+        [salesTotals]
+    );
+
+    const reportSnapshot = useMemo(() => ({
+        scopeStoreLabel,
+        dateRange,
+        salesReconciliation,
+        specialsBreakdown,
+        transactionHistory,
+        productRows,
+        productTotalsSum: sumAggregateProductTotals(salesTotals),
+        refundTotals,
+        staffTotals,
+        voucherStats,
+        calculatedStats,
+    }), [
+        calculatedStats,
+        dateRange,
+        productRows,
+        refundTotals,
+        salesReconciliation,
+        salesTotals,
+        scopeStoreLabel,
+        specialsBreakdown,
+        staffTotals,
+        transactionHistory,
+        voucherStats,
+    ]);
 
     const handleStoreChange = (e) => setSelectedStore(e.target.value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
@@ -208,377 +240,8 @@ export default function Reports() {
         });
     };
     
-    // Enhanced PDF Styles
-    const styles = StyleSheet.create({
-        // Page and Document Styles
-        page: { 
-            padding: 40, 
-            fontFamily: 'Helvetica',
-            backgroundColor: '#FFFFFF' 
-        },
-        headerContainer: {
-            flexDirection: 'row',
-            marginBottom: 20,
-            paddingBottom: 15,
-            borderBottom: '2 solid #6B46C1'
-        },
-        headerLogo: {
-            width: 60,
-            height: 60,
-            marginRight: 15
-        },
-        headerTextContainer: {
-            flex: 1,
-            justifyContent: 'center'
-        },
-        reportDateRange: {
-            fontSize: 11,
-            color: '#4B5563',
-            marginTop: 4
-        },
-        
-        // Titles and Headings
-        title: {
-            fontSize: 22,
-            marginBottom: 6,
-            fontWeight: 'bold',
-            color: '#6B46C1' // Purple to match iBEAN brand
-        },
-        subtitle: {
-            fontSize: 12,
-            color: '#4B5563',
-            marginBottom: 15
-        },
-        sectionHeader: {
-            backgroundColor: '#F3F4F6',
-            paddingVertical: 8,
-            paddingHorizontal: 10,
-            marginTop: 25,
-            marginBottom: 10,
-            borderRadius: 4,
-            borderLeft: '4 solid #6B46C1',
-            fontSize: 14,
-            fontWeight: 'bold',
-            color: '#1F2937'
-        },
-        
-        // General text
-        description: {
-            fontSize: 10,
-            color: '#4B5563',
-            marginBottom: 8,
-            lineHeight: 1.4
-        },
-        
-        // Table styles
-        table: {
-            display: 'table',
-            width: 'auto',
-            marginBottom: 15,
-            borderRadius: 4,
-            borderWidth: 1,
-            borderColor: '#E5E7EB',
-            borderStyle: 'solid'
-        },
-        tableRow: {
-            flexDirection: 'row',
-            borderBottomWidth: 1,
-            borderBottomColor: '#E5E7EB',
-            borderBottomStyle: 'solid',
-            alignItems: 'center',
-            minHeight: 24
-        },
-        tableRowAlternate: {
-            flexDirection: 'row',
-            borderBottomWidth: 1,
-            borderBottomColor: '#E5E7EB',
-            borderBottomStyle: 'solid',
-            alignItems: 'center',
-            minHeight: 24,
-            backgroundColor: '#F9FAFB'
-        },
-        tableCellHeader: {
-            flex: 1,
-            backgroundColor: '#6B46C1',
-            fontSize: 10,
-            fontWeight: 'bold',
-            padding: 8,
-            color: '#FFFFFF',
-            borderRightWidth: 1,
-            borderRightColor: '#9F7AEA',
-            borderRightStyle: 'solid'
-        },
-        tableCell: {
-            flex: 1,
-            fontSize: 9,
-            padding: 6,
-            color: '#4B5563',
-            borderRightWidth: 1,
-            borderRightColor: '#E5E7EB',
-            borderRightStyle: 'solid'
-        },
-        highlightCell: {
-            flex: 1,
-            fontSize: 9,
-            padding: 6,
-            color: '#6B46C1',
-            fontWeight: 'bold',
-            borderRightWidth: 1,
-            borderRightColor: '#E5E7EB',
-            borderRightStyle: 'solid'
-        },
-        
-        // List and stat blocks
-        statsContainer: {
-            marginTop: 10,
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between'
-        },
-        statItem: {
-            width: '48%',
-            marginBottom: 10,
-            backgroundColor: '#F9FAFB',
-            borderRadius: 4,
-            padding: 8,
-            borderLeftWidth: 3,
-            borderLeftColor: '#6B46C1',
-            borderLeftStyle: 'solid'
-        },
-        statLabel: {
-            fontSize: 9,
-            fontWeight: 'bold',
-            color: '#4B5563',
-            marginBottom: 2
-        },
-        statValue: {
-            fontSize: 11,
-            color: '#111827',
-            fontWeight: 'bold'
-        },
-        
-        // Footer
-        footer: {
-            position: 'absolute',
-            bottom: 30,
-            left: 40,
-            right: 40,
-            textAlign: 'center',
-            fontSize: 8,
-            color: '#9CA3AF',
-            borderTop: '1 solid #E5E7EB',
-            paddingTop: 10
-        }
-    });
-      
-    // Function definition
     const handleExportToPdf = async () => {
-        const doc = (
-            <Document>
-                <Page size="A4" style={styles.page}>
-                    {/* Professional Header with Logo */}
-                    <View style={styles.headerContainer}>
-                        <View style={styles.headerTextContainer}>
-                            <Text style={styles.title}>iBEAN Sales Analysis</Text>
-                            <Text style={styles.subtitle}>{selectedStore}</Text>
-                            <Text style={styles.reportDateRange}>Report Period: {dateRange.start} to {dateRange.end}</Text>
-                        </View>
-                    </View>
-
-                    <Text style={styles.sectionHeader}>Sales Reconciliation</Text>
-                    <View style={styles.statsContainer}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>Gross (subtotalBeforeDiscounts)</Text>
-                            <Text style={styles.statValue}>R {salesReconciliation.gross.toFixed(2)}</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>Promotions (specials + vouchers)</Text>
-                            <Text style={styles.statValue}>-R {salesReconciliation.promotions.toFixed(2)}</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statLabel}>Net (sale.total)</Text>
-                            <Text style={styles.statValue}>R {salesReconciliation.net.toFixed(2)}</Text>
-                        </View>
-                    </View>
-
-                    {specialsBreakdown.length > 0 && (
-                        <>
-                            <Text style={styles.sectionHeader}>Specials Applied</Text>
-                            <View style={styles.table}>
-                                <View style={styles.tableRow}>
-                                    <Text style={styles.tableCellHeader}>Special</Text>
-                                    <Text style={styles.tableCellHeader}>Times</Text>
-                                    <Text style={styles.tableCellHeader}>Total saved</Text>
-                                </View>
-                                {specialsBreakdown.map((row, index) => (
-                                    <View key={row.id} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
-                                        <Text style={styles.tableCell}>{row.name}</Text>
-                                        <Text style={styles.tableCell}>{row.timesApplied}</Text>
-                                        <Text style={styles.highlightCell}>R {row.totalSaved.toFixed(2)}</Text>
-                                    </View>
-                                ))}
-                            </View>
-                        </>
-                    )}
-
-                    <Text style={styles.sectionHeader}>Transaction History</Text>
-                    <Text style={styles.description}>
-                        {transactionHistory.length} transactions in the selected scope.
-                    </Text>
-                    <View style={styles.table}>
-                        <View style={styles.tableRow}>
-                            <Text style={styles.tableCellHeader}>Date / Time</Text>
-                            <Text style={styles.tableCellHeader}>Staff</Text>
-                            <Text style={styles.tableCellHeader}>Method</Text>
-                            <Text style={styles.tableCellHeader}>Items</Text>
-                            <Text style={styles.tableCellHeader}>Total</Text>
-                        </View>
-                        {transactionHistory.map((sale, index) => (
-                            <Fragment key={sale.id || index}>
-                                <View style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
-                                    <Text style={styles.tableCell}>
-                                        {sale.resolvedDate ? sale.resolvedDate.toLocaleString('en-ZA') : '--'}
-                                    </Text>
-                                    <Text style={styles.tableCell}>{sale.staffName || sale.createdBy?.name || 'Unknown'}</Text>
-                                    <Text style={styles.tableCell}>{sale.payment?.method || 'unknown'}</Text>
-                                    <Text style={styles.tableCell}>{sale.itemCount}</Text>
-                                    <Text style={styles.highlightCell}>R {Number(sale.total || 0).toFixed(2)}</Text>
-                                </View>
-                                <View style={styles.tableRowAlternate}>
-                                    <Text style={[styles.tableCell, { flex: 1, borderRightWidth: 0, color: '#374151' }]}>
-                                        {(() => {
-                                            const items = getTransactionItems(sale);
-                                            return items.length > 0 ? (
-                                                <>
-                                                    <Text style={{ fontWeight: 'bold', color: '#111827' }}>Items: </Text>
-                                                    {items
-                                                        .map((item) => `${item.quantity}x ${item.label} - R ${item.lineTotal.toFixed(2)}`)
-                                                        .join('  ·  ')}
-                                                </>
-                                            ) : (
-                                                'Items: No items recorded'
-                                            );
-                                        })()}
-                                    </Text>
-                                </View>
-                            </Fragment>
-                        ))}
-                    </View>
-
-                    <Text style={styles.sectionHeader}>Product Sales (gross line subtotals)</Text>
-                    <Text style={styles.description}>
-                        Menu-value totals from items sold (ZAR, before promotions). Product table: R {sumAggregateProductTotals(salesTotals).toFixed(2)} · Gross reconciliation: R {salesReconciliation.gross.toFixed(2)} · Net after promotions: R {salesReconciliation.net.toFixed(2)}.
-                    </Text>
-                    <View style={styles.table}>
-                        <View style={styles.tableRow}>
-                            <Text style={styles.tableCellHeader}>Item</Text>
-                            <Text style={styles.tableCellHeader}>Cash</Text>
-                            <Text style={styles.tableCellHeader}>Card</Text>
-                            <Text style={styles.tableCellHeader}>SnapScan</Text>
-                            <Text style={styles.tableCellHeader}>Other</Text>
-                            <Text style={styles.tableCellHeader}>Total</Text>
-                        </View>
-                        {Object.values(salesTotals).sort((a, b) => b.Total - a.Total).map((sale, index) => (
-                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
-                                <Text style={styles.tableCell}>{sale.Product}</Text>
-                                <Text style={styles.tableCell}>R {sale.Cash.toFixed(2)}</Text>
-                                <Text style={styles.tableCell}>R {sale.Card.toFixed(2)}</Text>
-                                <Text style={styles.tableCell}>R {sale.Snapscan.toFixed(2)}</Text>
-                                <Text style={styles.tableCell}>R {sale.Other.toFixed(2)}</Text>
-                                <Text style={styles.highlightCell}>R {sale.Total.toFixed(2)}</Text>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Refunds Table */}
-                    <Text style={styles.sectionHeader}>Refunds Issued</Text>
-                    <View style={styles.table}>
-                        <View style={styles.tableRow}>
-                            <Text style={styles.tableCellHeader}>Crew Member</Text>
-                            <Text style={styles.tableCellHeader}>Item</Text>
-                            <Text style={styles.tableCellHeader}>Method</Text>
-                            <Text style={styles.tableCellHeader}>Reason</Text>
-                            <Text style={styles.tableCellHeader}>Amount</Text>
-                        </View>
-                        {refundTotals.map((refund, index) => (
-                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
-                                <Text style={styles.tableCell}>{refund.staffName}</Text>
-                                <Text style={styles.tableCell}>{refund.item}</Text>
-                                <Text style={styles.tableCell}>{refund.method}</Text>
-                                <Text style={styles.tableCell}>{refund.reason}</Text>
-                                <Text style={styles.highlightCell}>R {refund.amount.toFixed(2)}</Text>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Crew Table */}
-                    <Text style={styles.sectionHeader}>Crew Performance</Text>
-                    <View style={styles.table}>
-                        <View style={styles.tableRow}>
-                            <Text style={styles.tableCellHeader}>Crew Member</Text>
-                            <Text style={styles.tableCellHeader}>Transactions</Text>
-                            <Text style={styles.tableCellHeader}>Avg Sale</Text>
-                            <Text style={styles.tableCellHeader}>Total Sales</Text>
-                            <Text style={styles.tableCellHeader}>Most Sold Product</Text>
-                        </View>
-                        {staffTotals.sort((a, b) => b.total - a.total).map((staff, index) => (
-                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
-                                <Text style={styles.tableCell}>{staff.staffName}</Text>
-                                <Text style={styles.tableCell}>{staff.transactions}</Text>
-                                <Text style={styles.tableCell}>R {staff.averageSale.toFixed(2)}</Text>
-                                <Text style={styles.highlightCell}>R {staff.total.toFixed(2)}</Text>
-                                <Text style={styles.tableCell}>{staff.mostPopularProduct}</Text>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Voucher Table */}
-                    <Text style={styles.sectionHeader}>Voucher Statistics</Text>
-                    <Text style={styles.description}>Summary of voucher usage including discount percentages, fixed amount discounts, and free items</Text>
-                    <View style={styles.table}>
-                        <View style={styles.tableRow}>
-                            <Text style={styles.tableCellHeader}>Voucher Type</Text>
-                            <Text style={styles.tableCellHeader}>Count</Text>
-                            <Text style={styles.tableCellHeader}>Value</Text>
-                        </View>
-                        {Object.keys(voucherStats.voucherUsageByType).map((voucherType, index) => (
-                            <View key={index} style={index % 2 === 0 ? styles.tableRow : styles.tableRowAlternate}>
-                                <Text style={styles.tableCell}>{voucherType}</Text>
-                                <Text style={styles.tableCell}>{voucherStats.voucherUsageByType[voucherType].count}</Text>
-                                <Text style={styles.highlightCell}>R {voucherStats.voucherUsageByType[voucherType].value.toFixed(2)}</Text>
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Stats List in Grid Layout */}
-                    <Text style={styles.sectionHeader}>Summary Statistics</Text>
-                    <View style={styles.statsContainer}>
-                        {[
-                            { label: "Peak Hour", value: calculatedStats.peakHour },
-                            { label: "Busiest Day (Value)", value: calculatedStats.bestDay },
-                            { label: "Most Used Payment", value: calculatedStats.topPaymentMethod },
-                            { label: "Refund Rate", value: `${calculatedStats.refundRate}%` },
-                            { label: "Avg Items/Sale", value: calculatedStats.avgItemsPerSale },
-                            { label: "Revenue/Active Hour", value: `R${calculatedStats.revenuePerHour.toFixed(2)}` },
-                            { label: "Total Vouchers Redeemed", value: voucherStats.totalVouchersRedeemed },
-                            { label: "Total Voucher Value", value: `R${voucherStats.totalVoucherValue.toFixed(2)}` },
-                            { label: "Most Popular Voucher Type", value: voucherStats.mostPopularVoucherType },
-                            { label: "Percent Sales with Vouchers", value: `${voucherStats.percentSalesWithVouchers}%` },
-                        ].map((stat, index) => (
-                            <View key={index} style={styles.statItem}>
-                                <Text style={styles.statLabel}>{stat.label}</Text>
-                                <Text style={styles.statValue}>{stat.value}</Text>
-                            </View>
-                        ))}
-                    </View>
-                    
-                    {/* Footer */}
-                    <Text style={styles.footer}>Generated by iBEAN Management System • {new Date().toLocaleDateString()} • Confidential</Text>
-                </Page>
-            </Document>
-        );
-
-        const blob = await pdf(doc).toBlob();
+        const blob = await buildReportsPdfBlob(reportSnapshot);
         const url = URL.createObjectURL(blob);
 
         const link = document.createElement('a');
