@@ -1,296 +1,727 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaEdit, FaTrashAlt, FaCalendarAlt, FaTag, FaStar } from 'react-icons/fa';
+import { getAuth } from 'firebase/auth';
+import { FaCalendarAlt, FaEdit, FaStar, FaTrashAlt } from 'react-icons/fa';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
-import { getAuth } from 'firebase/auth';
 import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
 import { useCollectionLive } from '../../hooks/useCollectionLive';
 import { useToastNotification } from '../../hooks/useToastNotification';
 import ToastNotification from '../../components/ToastNotification';
 
+const initialSpecialState = {
+  name: '',
+  description: '',
+  active: true,
+  mutuallyExclusive: false,
+  triggerType: 'product',
+  triggerProduct: '',
+  triggerProductSize: '',
+  triggerCategory: '',
+  triggerCategorySize: '',
+  triggerQuantity: 1,
+  rewardType: 'product',
+  rewardProduct: '',
+  rewardProductSize: '',
+  rewardCategory: '',
+  rewardCategorySize: '',
+  rewardQuantity: 1,
+  discountType: 'free',
+  discountValue: 100,
+  fixedDiscountAmount: 0,
+  startDate: '',
+  endDate: '',
+};
+
+const fieldClass =
+  'h-11 w-full rounded-xl border border-white/10 bg-white/10 px-3 text-sm text-white outline-none transition placeholder:text-neutral-500 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-400/20';
+
+const selectClass =
+  'h-11 w-full rounded-xl border border-white/10 bg-neutral-900/60 px-3 text-sm text-white outline-none transition focus:border-cyan-300/50';
+
+const toDateInputValue = (value) => {
+  if (!value) return '';
+  if (typeof value?.toDate === 'function') {
+    return value.toDate().toISOString().slice(0, 10);
+  }
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === 'string') {
+    return value.slice(0, 10);
+  }
+  return '';
+};
+
 export default function Specials() {
-    const { data: specialsData, error: specialsError } = useCollectionLive('specials');
-    const { data: productsData, error: productsError } = useCollectionLive('products');
-    const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
-    const initialSpecialState = {
-        name: '', description: '', active: true, mutuallyExclusive: false,
-        triggerType: 'product', triggerProduct: '', triggerProductSize: '', triggerCategory: '', triggerCategorySize: '', triggerQuantity: 1,
-        rewardType: 'product', rewardProduct: '', rewardProductSize: '', rewardCategory: '', rewardCategorySize: '', rewardQuantity: 1,
-        discountType: 'free', discountValue: 100, fixedDiscountAmount: 0,
-        startDate: '', endDate: '',
-    };
-    const [newSpecial, setNewSpecial] = useState(initialSpecialState);
-    const [editingId, setEditingId] = useState(null);
-    const { notification, notify, clearNotification } = useToastNotification();
-    const [isLoading, setIsLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState('all');
-    const authUser = getAuth().currentUser;
-    const specials = [...specialsData]
-        .filter((s) => documentBelongsToStore(s.storeId, authUser))
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    const products = [...productsData].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const { data: specialsData, error: specialsError } = useCollectionLive('specials');
+  const { data: productsData, error: productsError } = useCollectionLive('products');
+  const { data: categoriesData, error: categoriesError } = useCollectionLive('categories');
+  const { notification, notify, clearNotification } = useToastNotification();
 
-    useEffect(() => {
-        if (specialsError) {
-            notify('Failed to fetch specials.', 'error');
-            console.error(specialsError);
-        }
-        if (productsError) {
-            notify('Failed to fetch products.', 'error');
-            console.error(productsError);
-        }
-        if (categoriesError) {
-            notify('Failed to fetch categories.', 'error');
-            console.error(categoriesError);
-        }
-    }, [specialsError, productsError, categoriesError, notify]);
+  const [newSpecial, setNewSpecial] = useState(initialSpecialState);
+  const [editingId, setEditingId] = useState(null);
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
 
-    const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
-        setNewSpecial(prev => {
-            const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
-            // Reset dependent fields for data integrity
-            if (name === 'triggerType') {
-                updated.triggerProduct = ''; updated.triggerProductSize = ''; updated.triggerCategory = ''; updated.triggerCategorySize = '';
-            }
-            if (name === 'rewardType') {
-                updated.rewardProduct = ''; updated.rewardProductSize = ''; updated.rewardCategory = ''; updated.rewardCategorySize = '';
-            }
-            if (name === 'triggerProduct' || name === 'triggerCategory') {
-                updated.triggerProductSize = ''; updated.triggerCategorySize = '';
-            }
-            if (name === 'rewardProduct' || name === 'rewardCategory') {
-                updated.rewardProductSize = ''; updated.rewardCategorySize = '';
-            }
-            return updated;
-        });
-    };
+  const authUser = getAuth().currentUser;
 
-    const resetForm = () => {
-        setNewSpecial(initialSpecialState);
-        setEditingId(null);
-    };
+  const specials = useMemo(
+    () =>
+      [...(specialsData || [])]
+        .filter((special) => documentBelongsToStore(special.storeId, authUser))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [authUser, specialsData]
+  );
 
-    const handleStartEdit = (special) => {
-        setEditingId(special.id);
-        setNewSpecial({ ...initialSpecialState, ...special });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
+  const products = useMemo(
+    () => [...(productsData || [])].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [productsData]
+  );
 
-    const handleDelete = async (specialId) => {
-        if (!confirm('Are you sure you want to delete this special?')) return;
-        try {
-            await deleteDoc(doc(db, 'specials', specialId));
-            notify('Special deleted successfully', 'success');
-        } catch (error) {
-            notify('Failed to delete special', 'error');
-            console.error('Error deleting special:', error);
-        }
-    };
+  const categories = useMemo(
+    () => [...(categoriesData || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [categoriesData]
+  );
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!newSpecial.name) {
-            notify('Special name is required.', 'error');
-            return;
-        }
-        setIsLoading(true);
-
-        try {
-            const auth = getAuth();
-            const specialData = {
-                ...newSpecial,
-                storeId: getStoreId(auth.currentUser),
-                triggerQuantity: parseInt(newSpecial.triggerQuantity, 10) || 1,
-                rewardQuantity: parseInt(newSpecial.rewardQuantity, 10) || 1,
-            };
-
-            if (newSpecial.discountType === 'free') {
-                specialData.discountValue = 100;
-                specialData.fixedDiscountAmount = 0;
-            } else if (newSpecial.discountType === 'percentage') {
-                specialData.discountValue = parseInt(newSpecial.discountValue, 10) || 0;
-                specialData.fixedDiscountAmount = 0;
-            } else if (newSpecial.discountType === 'fixed') {
-                specialData.discountValue = 0;
-                specialData.fixedDiscountAmount = parseFloat(newSpecial.fixedDiscountAmount) || 0;
-            }
-
-            if (editingId) {
-                await updateDoc(doc(db, 'specials', editingId), specialData);
-                notify('Special updated successfully', 'success');
-            } else {
-                await addDoc(collection(db, 'specials'), specialData);
-                notify('Special added successfully', 'success');
-            }
-            resetForm();
-        } catch (error) {
-            notify('Failed to save special: ' + error.message, 'error');
-            console.error('Error saving special:', error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const getVarietiesForCategory = (categoryName) => {
-        const category = categories.find(c => c.name === categoryName);
-        return category?.varieties || [];
-    };
-
-    const filteredSpecials = specials.filter(s => {
+  const filteredSpecials = useMemo(
+    () =>
+      specials.filter((special) => {
         if (activeTab === 'all') return true;
-        if (activeTab === 'exclusive') return s.mutuallyExclusive;
-        if (activeTab === 'stackable') return !s.mutuallyExclusive;
+        if (activeTab === 'exclusive') return !!special.mutuallyExclusive;
+        if (activeTab === 'stackable') return !special.mutuallyExclusive;
         return true;
+      }),
+    [activeTab, specials]
+  );
+
+  useEffect(() => {
+    if (specialsError) {
+      notify('Failed to fetch specials.', 'error');
+      console.error(specialsError);
+    }
+    if (productsError) {
+      notify('Failed to fetch products.', 'error');
+      console.error(productsError);
+    }
+    if (categoriesError) {
+      notify('Failed to fetch categories.', 'error');
+      console.error(categoriesError);
+    }
+  }, [categoriesError, notify, productsError, specialsError]);
+
+  const resetForm = () => {
+    setNewSpecial(initialSpecialState);
+    setEditingId(null);
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+
+    setNewSpecial((prev) => {
+      const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
+
+      if (name === 'triggerType') {
+        updated.triggerProduct = '';
+        updated.triggerProductSize = '';
+        updated.triggerCategory = '';
+        updated.triggerCategorySize = '';
+      }
+
+      if (name === 'rewardType') {
+        updated.rewardProduct = '';
+        updated.rewardProductSize = '';
+        updated.rewardCategory = '';
+        updated.rewardCategorySize = '';
+      }
+
+      if (name === 'triggerProduct' || name === 'triggerCategory') {
+        updated.triggerProductSize = '';
+        updated.triggerCategorySize = '';
+      }
+
+      if (name === 'rewardProduct' || name === 'rewardCategory') {
+        updated.rewardProductSize = '';
+        updated.rewardCategorySize = '';
+      }
+
+      return updated;
     });
+  };
 
-    const renderSizeDropdown = (field, value, onChange) => {
-        let categoryName = '';
-        if (field === 'triggerProduct' || field === 'rewardProduct') {
-            const product = products.find(p => p.id === newSpecial[field]);
-            categoryName = product?.category;
-        } else if (field === 'triggerCategory' || field === 'rewardCategory') {
-            categoryName = newSpecial[field];
-        }
-        const varieties = getVarietiesForCategory(categoryName);
-        if (varieties.length === 0) return null;
+  const handleStartEdit = (special) => {
+    setEditingId(special.id);
+    setNewSpecial({
+      ...initialSpecialState,
+      ...special,
+      startDate: toDateInputValue(special.startDate),
+      endDate: toDateInputValue(special.endDate),
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-        return (
-            <select name={`${field}Size`} value={value} onChange={onChange} className="p-2 bg-neutral-700 rounded w-full">
-                <option value="">Any Size</option>
-                {varieties.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-        );
-    };
+  const handleDelete = async (specialId) => {
+    try {
+      await deleteDoc(doc(db, 'specials', specialId));
+      notify('Special deleted successfully', 'success');
+    } catch (error) {
+      notify('Failed to delete special', 'error');
+      console.error('Error deleting special:', error);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!newSpecial.name) {
+      notify('Special name is required.', 'error');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const auth = getAuth();
+      const specialData = {
+        ...newSpecial,
+        storeId: getStoreId(auth.currentUser),
+        triggerQuantity: parseInt(newSpecial.triggerQuantity, 10) || 1,
+        rewardQuantity: parseInt(newSpecial.rewardQuantity, 10) || 1,
+      };
+
+      if (newSpecial.discountType === 'free') {
+        specialData.discountValue = 100;
+        specialData.fixedDiscountAmount = 0;
+      } else if (newSpecial.discountType === 'percentage') {
+        specialData.discountValue = parseInt(newSpecial.discountValue, 10) || 0;
+        specialData.fixedDiscountAmount = 0;
+      } else if (newSpecial.discountType === 'fixed') {
+        specialData.discountValue = 0;
+        specialData.fixedDiscountAmount = parseFloat(newSpecial.fixedDiscountAmount) || 0;
+      }
+
+      if (specialData.startDate) {
+        specialData.startDate = Timestamp.fromDate(new Date(`${specialData.startDate}T00:00:00`));
+      }
+
+      if (specialData.endDate) {
+        specialData.endDate = Timestamp.fromDate(new Date(`${specialData.endDate}T23:59:59`));
+      }
+
+      if (editingId) {
+        await updateDoc(doc(db, 'specials', editingId), specialData);
+        notify('Special updated successfully', 'success');
+      } else {
+        await addDoc(collection(db, 'specials'), specialData);
+        notify('Special added successfully', 'success');
+      }
+
+      resetForm();
+    } catch (error) {
+      notify(`Failed to save special: ${error.message}`, 'error');
+      console.error('Error saving special:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getVarietiesForCategory = (categoryName) => {
+    const category = categories.find((category) => category.name === categoryName);
+    return category?.varieties || [];
+  };
+
+  const renderSizeDropdown = (field, value, onChange) => {
+    let categoryName = '';
+
+    if (field === 'triggerProduct' || field === 'rewardProduct') {
+      const product = products.find((item) => item.id === newSpecial[field]);
+      categoryName = product?.category;
+    } else if (field === 'triggerCategory' || field === 'rewardCategory') {
+      categoryName = newSpecial[field];
+    }
+
+    const varieties = getVarietiesForCategory(categoryName);
+    if (varieties.length === 0) return null;
 
     return (
-        <RouteGuard requiredRoles={['manager']}>
-            <div className="flex flex-col min-h-screen p-6 bg-neutral-900 text-neutral-50">
-                {notification.message && <ToastNotification key={notification.key} message={notification.message} type={notification.type} onClose={clearNotification} />}
-                <h1 className="text-3xl font-bold mb-6">Specials Management</h1>
-
-                <form onSubmit={handleSubmit} className="mb-8 p-6 bg-neutral-800 rounded-lg shadow-md space-y-6">
-                    <div>
-                        <input type="text" name="name" value={newSpecial.name} onChange={handleChange} placeholder="Special Name" className="w-full p-2 bg-neutral-700 rounded" required />
-                        <input type="text" name="description" value={newSpecial.description} onChange={handleChange} placeholder="Description" className="mt-2 w-full p-2 bg-neutral-700 rounded" />
-                    </div>
-
-                    <div className='flex flex-col lg:flex-row justify-between items-start gap-6'>
-                        {/* Trigger Section */}
-                        <div className="w-full lg:w-1/2 border border-neutral-700 p-4 rounded-md space-y-3">
-                            <h3 className="text-lg font-semibold text-indigo-400">Trigger Conditions</h3>
-                            <select name="triggerType" value={newSpecial.triggerType} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                                <option value="product">Specific Product</option>
-                                <option value="category">Any Product in Category</option>
-                            </select>
-                            {newSpecial.triggerType === 'product' ? (
-                                <select name="triggerProduct" value={newSpecial.triggerProduct} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                                    <option value="">Select Product...</option>
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                            ) : (
-                                <select name="triggerCategory" value={newSpecial.triggerCategory} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                                    <option value="">Select Category...</option>
-                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                </select>
-                            )}
-                            {newSpecial.triggerType === 'product'
-  ? renderSizeDropdown('triggerProduct', newSpecial.triggerProductSize, handleChange)
-  : renderSizeDropdown('triggerCategory', newSpecial.triggerCategorySize, handleChange)
-}
-                            <input type="number" name="triggerQuantity" value={newSpecial.triggerQuantity} onChange={handleChange} placeholder="Quantity needed" min="1" className="p-2 bg-neutral-700 rounded w-full" required />
-                        </div>
-
-                        {/* Reward Section */}
-                        <div className="w-full lg:w-1/2 border border-neutral-700 p-4 rounded-md space-y-3">
-                            <h3 className="text-lg font-semibold text-green-400">Reward Conditions</h3>
-                            <select name="rewardType" value={newSpecial.rewardType} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                                <option value="product">Specific Product</option>
-                                <option value="category">Any Product in Category</option>
-                            </select>
-                            {newSpecial.rewardType === 'product' ? (
-                                <select name="rewardProduct" value={newSpecial.rewardProduct} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                                    <option value="">Select Product...</option>
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                            ) : (
-                                <select name="rewardCategory" value={newSpecial.rewardCategory} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                                    <option value="">Select Category...</option>
-                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                </select>
-                            )}
-                            {newSpecial.rewardType === 'product'
-      ? renderSizeDropdown('rewardProduct', newSpecial.rewardProductSize, handleChange)
-      : renderSizeDropdown('rewardCategory', newSpecial.rewardCategorySize, handleChange)
-    }
-                            <input type="number" name="rewardQuantity" value={newSpecial.rewardQuantity} onChange={handleChange} placeholder="Reward quantity" min="1" className="p-2 bg-neutral-700 rounded w-full" required />
-                        </div>
-                    </div>
-
-                    <div className="border border-neutral-700 p-4 rounded-md space-y-3">
-                        <h3 className="text-lg font-semibold text-amber-400">Discount Settings</h3>
-                        <select name="discountType" value={newSpecial.discountType} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full">
-                            <option value="free">Free</option>
-                            <option value="percentage">Percentage Discount</option>
-                            <option value="fixed">Fixed Amount Discount</option>
-                        </select>
-                        {newSpecial.discountType === 'percentage' && <input type="number" name="discountValue" value={newSpecial.discountValue} onChange={handleChange} placeholder="Discount %" min="1" max="100" className="p-2 bg-neutral-700 rounded w-full" />}
-                        {newSpecial.discountType === 'fixed' && <input type="number" name="fixedDiscountAmount" value={newSpecial.fixedDiscountAmount} onChange={handleChange} placeholder="Discount amount (R)" min="0.01" step="0.01" className="p-2 bg-neutral-700 rounded w-full" />}
-                    </div>
-
-                    <div className="border border-neutral-700 p-4 rounded-md">
-                        <h3 className="text-lg font-semibold mb-2 text-blue-400">Validity Period (Optional)</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input type="date" name="startDate" value={newSpecial.startDate} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full" />
-                            <input type="date" name="endDate" value={newSpecial.endDate} onChange={handleChange} className="p-2 bg-neutral-700 rounded w-full" />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-4 rounded-md bg-neutral-700/50">
-                        <input type="checkbox" id="mutuallyExclusive" name="mutuallyExclusive" checked={newSpecial.mutuallyExclusive} onChange={handleChange} className="w-5 h-5 text-yellow-600 bg-gray-100 rounded border-gray-300 focus:ring-yellow-500" />
-                        <label htmlFor="mutuallyExclusive" className="font-medium text-yellow-400">Mutually Exclusive <span className="text-sm text-neutral-400">(Cannot stack with other specials)</span></label>
-                    </div>
-
-                    <div className="flex gap-4">
-                        <button type="submit" disabled={isLoading} className="w-full p-3 bg-indigo-600 hover:bg-indigo-700 rounded disabled:bg-neutral-600 font-medium">
-                            {isLoading ? 'Saving...' : (editingId ? 'Update Special' : 'Add Special')}
-                        </button>
-                        {editingId && <button type="button" onClick={resetForm} className="p-3 bg-neutral-600 hover:bg-neutral-500 rounded">Cancel</button>}
-                    </div>
-                </form>
-
-                <div className="mb-6 flex gap-4 border-b border-neutral-700 pb-2">
-                    <button className={`py-2 px-4 ${activeTab === 'all' ? 'border-b-2 border-indigo-500 text-white' : 'text-neutral-400'}`} onClick={() => setActiveTab('all')}>All</button>
-                    <button className={`py-2 px-4 flex items-center gap-2 ${activeTab === 'exclusive' ? 'border-b-2 border-yellow-500 text-white' : 'text-neutral-400'}`} onClick={() => setActiveTab('exclusive')}><FaStar /> Exclusive</button>
-                    <button className={`py-2 px-4 ${activeTab === 'stackable' ? 'border-b-2 border-green-500 text-white' : 'text-neutral-400'}`} onClick={() => setActiveTab('stackable')}>Stackable</button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredSpecials.map(special => (
-                        <div key={special.id} className={`p-5 bg-neutral-800 rounded-lg shadow-md border ${special.mutuallyExclusive ? 'border-yellow-700' : 'border-neutral-700'}`}>
-                            <div className="flex justify-between items-start">
-                                <div className="flex-grow pr-4">
-                                    <h3 className="text-xl font-bold text-white">{special.name}</h3>
-                                    <p className="text-neutral-400 mt-1 text-sm">{special.description}</p>
-                                    <div className="mt-3 space-y-2 text-sm">
-                                        <p><span className="font-semibold text-indigo-300">Buy:</span> {special.triggerQuantity} &times; {special.triggerType === 'product' ? (products.find(p => p.id === special.triggerProduct)?.name || 'N/A') : special.triggerCategory} {special.triggerProductSize || special.triggerCategorySize}</p>
-                                        <p><span className="font-semibold text-green-300">Get:</span> {special.rewardQuantity} &times; {special.rewardType === 'product' ? (products.find(p => p.id === special.rewardProduct)?.name || 'N/A') : special.rewardCategory} {special.rewardProductSize || special.rewardCategorySize} <span className="font-bold text-amber-300">{special.discountType === 'free' ? 'FREE' : special.discountType === 'percentage' ? `${special.discountValue}% off` : `R${special.fixedDiscountAmount?.toFixed(2)} off`}</span></p>
-                                        {special.startDate && <p className="text-neutral-500"><FaCalendarAlt className="inline mr-2" />{special.startDate} to {special.endDate}</p>}
-                                    </div>
-                                </div>
-                                <div className="flex flex-col gap-3 flex-shrink-0">
-                                    <button onClick={() => handleStartEdit(special)} className="text-blue-400 hover:text-blue-300"><FaEdit /></button>
-                                    <button onClick={() => handleDelete(special.id)} className="text-red-400 hover:text-red-300"><FaTrashAlt /></button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </RouteGuard>
+      <select name={`${field}Size`} value={value} onChange={onChange} className={selectClass}>
+        <option value="">Any size</option>
+        {varieties.map((variety) => (
+          <option key={variety} value={variety}>
+            {variety}
+          </option>
+        ))}
+      </select>
     );
+  };
+
+  const productNameById = (id) => products.find((product) => product.id === id)?.name || 'N/A';
+
+  return (
+    <RouteGuard requiredRoles={['manager']}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/35 p-2.5 text-neutral-50 md:p-3">
+        {notification.message && (
+          <ToastNotification
+            key={notification.key}
+            message={notification.message}
+            type={notification.type}
+            onClose={clearNotification}
+          />
+        )}
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <section className="min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-neutral-900/60 p-3 shadow-xl backdrop-blur-2xl md:p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-white md:text-base">
+                  {editingId ? 'Edit special' : 'Create special'}
+                </h2>
+                <p className="mt-1 text-[11px] text-neutral-400 md:text-xs">
+                  Keep the form focused on one offer at a time.
+                </p>
+              </div>
+              {editingId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  onClick={resetForm}
+                >
+                  Cancel edit
+                </Button>
+              )}
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col space-y-4">
+              <div className="grid gap-3">
+                <Input
+                  type="text"
+                  name="name"
+                  value={newSpecial.name}
+                  onChange={handleChange}
+                  placeholder="Special name"
+                  className={fieldClass}
+                  required
+                />
+                <Input
+                  type="text"
+                  name="description"
+                  value={newSpecial.description}
+                  onChange={handleChange}
+                  placeholder="Description"
+                  className={fieldClass}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <h3 className="text-sm font-semibold text-cyan-200">Trigger Conditions</h3>
+                  <div className="mt-3 space-y-3">
+                    <select
+                      name="triggerType"
+                      value={newSpecial.triggerType}
+                      onChange={handleChange}
+                      className={selectClass}
+                    >
+                      <option value="product">Specific Product</option>
+                      <option value="category">Any Product in Category</option>
+                    </select>
+
+                    {newSpecial.triggerType === 'product' ? (
+                      <select
+                        name="triggerProduct"
+                        value={newSpecial.triggerProduct}
+                        onChange={handleChange}
+                        className={selectClass}
+                      >
+                        <option value="">Select product...</option>
+                        {products.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        name="triggerCategory"
+                        value={newSpecial.triggerCategory}
+                        onChange={handleChange}
+                        className={selectClass}
+                      >
+                        <option value="">Select category...</option>
+                        {categories.map((category) => (
+                          <option key={category.id || category.name} value={category.name}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {newSpecial.triggerType === 'product'
+                      ? renderSizeDropdown('triggerProduct', newSpecial.triggerProductSize, handleChange)
+                      : renderSizeDropdown('triggerCategory', newSpecial.triggerCategorySize, handleChange)}
+
+                    <Input
+                      type="number"
+                      name="triggerQuantity"
+                      value={newSpecial.triggerQuantity}
+                      onChange={handleChange}
+                      placeholder="Quantity needed"
+                      min="1"
+                      className={fieldClass}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <h3 className="text-sm font-semibold text-emerald-200">Reward Conditions</h3>
+                  <div className="mt-3 space-y-3">
+                    <select
+                      name="rewardType"
+                      value={newSpecial.rewardType}
+                      onChange={handleChange}
+                      className={selectClass}
+                    >
+                      <option value="product">Specific Product</option>
+                      <option value="category">Any Product in Category</option>
+                    </select>
+
+                    {newSpecial.rewardType === 'product' ? (
+                      <select
+                        name="rewardProduct"
+                        value={newSpecial.rewardProduct}
+                        onChange={handleChange}
+                        className={selectClass}
+                      >
+                        <option value="">Select product...</option>
+                        {products.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        name="rewardCategory"
+                        value={newSpecial.rewardCategory}
+                        onChange={handleChange}
+                        className={selectClass}
+                      >
+                        <option value="">Select category...</option>
+                        {categories.map((category) => (
+                          <option key={category.id || category.name} value={category.name}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {newSpecial.rewardType === 'product'
+                      ? renderSizeDropdown('rewardProduct', newSpecial.rewardProductSize, handleChange)
+                      : renderSizeDropdown('rewardCategory', newSpecial.rewardCategorySize, handleChange)}
+
+                    <Input
+                      type="number"
+                      name="rewardQuantity"
+                      value={newSpecial.rewardQuantity}
+                      onChange={handleChange}
+                      placeholder="Reward quantity"
+                      min="1"
+                      className={fieldClass}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <h3 className="text-sm font-semibold text-amber-200">Discount Settings</h3>
+                <div className="mt-3 space-y-3">
+                  <select
+                    name="discountType"
+                    value={newSpecial.discountType}
+                    onChange={handleChange}
+                    className={selectClass}
+                  >
+                    <option value="free">Free</option>
+                    <option value="percentage">Percentage Discount</option>
+                    <option value="fixed">Fixed Amount Discount</option>
+                  </select>
+
+                  {newSpecial.discountType === 'percentage' && (
+                    <Input
+                      type="number"
+                      name="discountValue"
+                      value={newSpecial.discountValue}
+                      onChange={handleChange}
+                      placeholder="Discount %"
+                      min="1"
+                      max="100"
+                      className={fieldClass}
+                    />
+                  )}
+
+                  {newSpecial.discountType === 'fixed' && (
+                    <Input
+                      type="number"
+                      name="fixedDiscountAmount"
+                      value={newSpecial.fixedDiscountAmount}
+                      onChange={handleChange}
+                      placeholder="Discount amount (R)"
+                      min="0.01"
+                      step="0.01"
+                      className={fieldClass}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <h3 className="mb-2 text-sm font-semibold text-blue-200">Validity period</h3>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Input
+                    type="date"
+                    name="startDate"
+                    value={newSpecial.startDate}
+                    onChange={handleChange}
+                    className={fieldClass}
+                  />
+                  <Input
+                    type="date"
+                    name="endDate"
+                    value={newSpecial.endDate}
+                    onChange={handleChange}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <input
+                  type="checkbox"
+                  id="mutuallyExclusive"
+                  name="mutuallyExclusive"
+                  checked={newSpecial.mutuallyExclusive}
+                  onChange={handleChange}
+                  className="mt-1 h-5 w-5 rounded border-white/20 bg-neutral-900/60 text-cyan-400 focus:ring-cyan-400/50"
+                />
+                <span>
+                  <span className="block font-medium text-amber-200">Mutually exclusive</span>
+                  <span className="block text-sm text-neutral-400">Cannot stack with other specials</span>
+                </span>
+              </label>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="min-h-12 flex-1 rounded-xl bg-cyan-500 text-white hover:bg-cyan-600"
+                >
+                  {isLoading ? 'Saving...' : editingId ? 'Update special' : 'Add special'}
+                </Button>
+                {editingId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetForm}
+                    className="min-h-12 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </form>
+          </section>
+
+          <section className="min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-neutral-900/60 p-3 shadow-xl backdrop-blur-2xl md:p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-white md:text-base">Specials list</h2>
+                <p className="mt-1 text-[11px] text-neutral-400 md:text-xs">
+                  Review active rules and edit the ones that need changes.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={activeTab === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('all')}
+                  className={
+                    activeTab === 'all'
+                      ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                      : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                  }
+                >
+                  All
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeTab === 'exclusive' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('exclusive')}
+                  className={
+                    activeTab === 'exclusive'
+                      ? 'bg-yellow-500 text-black hover:bg-yellow-400'
+                      : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                  }
+                >
+                  <FaStar className="mr-2" />
+                  Exclusive
+                </Button>
+                <Button
+                  type="button"
+                  variant={activeTab === 'stackable' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('stackable')}
+                  className={
+                    activeTab === 'stackable'
+                      ? 'bg-emerald-500 text-black hover:bg-emerald-400'
+                      : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                  }
+                >
+                  Stackable
+                </Button>
+              </div>
+            </div>
+
+            <div className="h-[calc(100%-3.75rem)] space-y-3 overflow-y-auto pr-1">
+              {filteredSpecials.length === 0 ? (
+                <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-neutral-400">
+                  No specials match the current filter.
+                </div>
+              ) : (
+                filteredSpecials.map((special) => (
+                  <article
+                    key={special.id}
+                    className={`rounded-[24px] border p-4 shadow-lg backdrop-blur-xl ${
+                      special.mutuallyExclusive
+                        ? 'border-yellow-400/25 bg-yellow-400/10'
+                        : 'border-white/10 bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-white md:text-lg">{special.name}</h3>
+                          {special.mutuallyExclusive && (
+                            <span className="rounded-full border border-yellow-400/30 bg-yellow-400/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-yellow-200">
+                              Exclusive
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm text-neutral-400">
+                          {special.description || 'No description provided.'}
+                        </p>
+                        <div className="mt-3 space-y-2 text-sm text-neutral-200">
+                          <p>
+                            <span className="font-semibold text-cyan-200">Buy:</span> {special.triggerQuantity} x{' '}
+                            {special.triggerType === 'product'
+                              ? productNameById(special.triggerProduct)
+                              : special.triggerCategory}{' '}
+                            {special.triggerProductSize || special.triggerCategorySize}
+                          </p>
+                          <p>
+                            <span className="font-semibold text-emerald-200">Get:</span> {special.rewardQuantity} x{' '}
+                            {special.rewardType === 'product'
+                              ? productNameById(special.rewardProduct)
+                              : special.rewardCategory}{' '}
+                            {special.rewardProductSize || special.rewardCategorySize}{' '}
+                            <span className="font-semibold text-amber-200">
+                              {special.discountType === 'free'
+                                ? 'FREE'
+                                : special.discountType === 'percentage'
+                                  ? `${special.discountValue}% off`
+                                  : `R${Number(special.fixedDiscountAmount || 0).toFixed(2)} off`}
+                            </span>
+                          </p>
+                          {special.startDate && (
+                            <p className="flex items-center gap-2 text-xs text-neutral-400">
+                              <FaCalendarAlt />
+                              {typeof special.startDate?.toDate === 'function'
+                                ? special.startDate.toDate().toLocaleDateString('en-ZA')
+                                : special.startDate}{' '}
+                              to{' '}
+                              {special.endDate?.toDate
+                                ? special.endDate.toDate().toLocaleDateString('en-ZA')
+                                : special.endDate || 'open ended'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 flex-col gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          onClick={() => handleStartEdit(special)}
+                          className="border-white/10 bg-white/5 text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
+                        >
+                          <FaEdit />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-sm"
+                          onClick={() => setDeleteCandidate(special)}
+                          className="border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-white"
+                        >
+                          <FaTrashAlt />
+                        </Button>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        <Dialog
+          open={Boolean(deleteCandidate)}
+          onOpenChange={(open) => {
+            if (!open) setDeleteCandidate(null);
+          }}
+        >
+          <DialogContent className="border-white/10 bg-neutral-900 text-white">
+            <DialogHeader className="text-left">
+              <DialogTitle>Delete special?</DialogTitle>
+              <DialogDescription className="text-neutral-400">
+                This removes the special rule permanently. You can recreate it later if needed.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                onClick={() => setDeleteCandidate(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="bg-red-500 text-white hover:bg-red-600"
+                onClick={async () => {
+                  if (!deleteCandidate) return;
+                  await handleDelete(deleteCandidate.id);
+                  setDeleteCandidate(null);
+                }}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </RouteGuard>
+  );
 }
