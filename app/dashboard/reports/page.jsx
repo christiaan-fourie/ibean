@@ -715,7 +715,7 @@ export default function Reports() {
                                 {transactionHistory.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-cyan-100 sm:text-sm">
-                                            <thead className="sticky top-0 z-10">
+                                            <thead>
                                                 <tr className="bg-neutral-900/70">
                                                     <th className="px-2 py-2 text-left sm:px-4">Time</th>
                                                     <th className="px-2 py-2 text-left sm:px-4">Staff</th>
@@ -827,7 +827,7 @@ export default function Reports() {
                                 {Object.keys(salesTotals).length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-green-100 sm:text-sm">
-                                            <thead className="sticky top-0 z-10">
+                                            <thead>
                                                 <tr className="bg-neutral-900/70">
                                                     <th className="px-2 py-2 text-left sm:px-4">Product</th>
                                                     <th className="px-2 py-2 text-left sm:px-4">Cash</th>
@@ -860,7 +860,7 @@ export default function Reports() {
                                 {refundTotals.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-red-100 sm:text-sm">
-                                            <thead className="sticky top-0 z-10">
+                                            <thead>
                                                 <tr className="bg-neutral-900/70">
                                                     <th className="px-2 py-2 text-left sm:px-4">Staff</th>
                                                     <th className="px-2 py-2 text-left sm:px-4">Item</th>
@@ -891,7 +891,7 @@ export default function Reports() {
                                 {staffTotals.length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-blue-100 sm:text-sm">
-                                            <thead className="sticky top-0 z-10">
+                                            <thead>
                                                 <tr className="bg-neutral-900/70">
                                                     <th className="px-2 py-2 text-left sm:px-4">Staff</th>
                                                     <th className="px-2 py-2 text-left sm:px-4">Transactions</th>
@@ -922,7 +922,7 @@ export default function Reports() {
                                 {Object.keys(voucherStats.voucherUsageByType).length > 0 ? (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full text-[11px] text-yellow-100 sm:text-sm">
-                                            <thead className="sticky top-0 z-10">
+                                            <thead>
                                                 <tr className="bg-neutral-900/70">
                                                     <th className="px-2 py-2 text-left sm:px-4">Voucher Type</th>
                                                     <th className="px-2 py-2 text-left sm:px-4">Count</th>
