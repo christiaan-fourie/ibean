@@ -90,15 +90,13 @@ export default function Specials() {
   const [editingId, setEditingId] = useState(null);
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
 
   const authUser = getAuth().currentUser;
 
   const specials = useMemo(
     () =>
       [...(specialsData || [])]
-        .filter((special) => documentBelongsToStore(special.storeId, authUser))
-        .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+        .filter((special) => documentBelongsToStore(special.storeId, authUser)),
     [authUser, specialsData]
   );
 
@@ -110,17 +108,6 @@ export default function Specials() {
   const categories = useMemo(
     () => [...(categoriesData || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [categoriesData]
-  );
-
-  const filteredSpecials = useMemo(
-    () =>
-      specials.filter((special) => {
-        if (activeTab === 'all') return true;
-        if (activeTab === 'exclusive') return !!special.mutuallyExclusive;
-        if (activeTab === 'stackable') return !special.mutuallyExclusive;
-        return true;
-      }),
-    [activeTab, specials]
   );
 
   useEffect(() => {
@@ -574,20 +561,36 @@ export default function Specials() {
                 )}
               </div>
 
-              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <input
-                  type="checkbox"
-                  id="mutuallyExclusive"
-                  name="mutuallyExclusive"
-                  checked={newSpecial.mutuallyExclusive}
-                  onChange={handleChange}
-                  className="mt-1 h-5 w-5 rounded border-white/20 bg-neutral-900/60 text-cyan-400 focus:ring-cyan-400/50"
-                />
-                <span>
-                  <span className="block font-medium text-amber-200">Mutually exclusive</span>
-                  <span className="block text-sm text-neutral-400">Cannot stack with other specials</span>
-                </span>
-              </label>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <h3 className="text-sm font-semibold text-amber-200">Can be stacked with other specials</h3>
+                <p className="mt-1 text-sm text-neutral-400">Choose whether this special should work alongside others.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={newSpecial.mutuallyExclusive ? 'outline' : 'default'}
+                    onClick={() => setNewSpecial((prev) => ({ ...prev, mutuallyExclusive: false }))}
+                    className={
+                      !newSpecial.mutuallyExclusive
+                        ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                        : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                    }
+                  >
+                    Yes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={newSpecial.mutuallyExclusive ? 'default' : 'outline'}
+                    onClick={() => setNewSpecial((prev) => ({ ...prev, mutuallyExclusive: true }))}
+                    className={
+                      newSpecial.mutuallyExclusive
+                        ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                        : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                    }
+                  >
+                    No
+                  </Button>
+                </div>
+              </div>
 
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
@@ -622,64 +625,20 @@ export default function Specials() {
           </section>
 
           <section className="min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-neutral-900/60 p-3 shadow-xl backdrop-blur-2xl md:p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-white md:text-base">Specials list</h2>
-                <p className="mt-1 text-[11px] text-neutral-400 md:text-xs">
-                  Review active rules and edit the ones that need changes.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant={activeTab === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveTab('all')}
-                  className={
-                    activeTab === 'all'
-                      ? 'bg-cyan-500 text-white hover:bg-cyan-600'
-                      : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
-                  }
-                >
-                  All
-                </Button>
-                <Button
-                  type="button"
-                  variant={activeTab === 'exclusive' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveTab('exclusive')}
-                  className={
-                    activeTab === 'exclusive'
-                      ? 'bg-yellow-500 text-black hover:bg-yellow-400'
-                      : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
-                  }
-                >
-                  <FaStar className="mr-2" />
-                  Exclusive
-                </Button>
-                <Button
-                  type="button"
-                  variant={activeTab === 'stackable' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setActiveTab('stackable')}
-                  className={
-                    activeTab === 'stackable'
-                      ? 'bg-emerald-500 text-black hover:bg-emerald-400'
-                      : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
-                  }
-                >
-                  Stackable
-                </Button>
-              </div>
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-white md:text-base">Specials list</h2>
+              <p className="mt-1 text-[11px] text-neutral-400 md:text-xs">
+                Review active rules and edit the ones that need changes.
+              </p>
             </div>
 
             <div className="h-[calc(100%-3.75rem)] space-y-3 overflow-y-auto pr-1">
-              {filteredSpecials.length === 0 ? (
+              {specials.length === 0 ? (
                 <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-neutral-400">
-                  No specials match the current filter.
+                  No specials available.
                 </div>
               ) : (
-                filteredSpecials.map((special) => (
+                specials.map((special) => (
                   <article
                     key={special.id}
                     className={`rounded-[24px] border p-4 shadow-lg backdrop-blur-xl ${
