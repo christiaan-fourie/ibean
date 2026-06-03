@@ -5,6 +5,7 @@ import { FaPlus, FaMinus, FaGift } from 'react-icons/fa';
 import { ImBin } from 'react-icons/im';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { Button } from '@/components/ui/button';
 import db from '../../utils/firebase';
 import { auth } from '../../utils/firebase';
 import ConfirmOrder from './ConfirmOrder';
@@ -96,10 +97,10 @@ export default function OrderCheckout() {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-neutral-900/70 p-3 backdrop-blur-xl">
       <div className="flex-shrink-0">
-        <h2 className="text-base font-semibold text-white mt-1">Order Summary</h2>
-        <p className="text-xs text-gray-400">Adjust quantities as needed.</p>
+        <h2 className="mt-1 text-base font-semibold text-white">Order Summary</h2>
+        <p className="text-xs text-neutral-400">Adjust quantities as needed.</p>
         {specialsError && (
-          <div className="my-1 p-1.5 bg-red-600/80 border border-red-300/20 text-white text-[10px] rounded-xl">{specialsError}</div>
+          <div className="my-1 rounded-xl border border-red-300/20 bg-red-600/80 p-1.5 text-[10px] text-white">{specialsError}</div>
         )}
       </div>
 
@@ -109,60 +110,69 @@ export default function OrderCheckout() {
             orderDetails.map((item) => (
               <li
                 key={item.id}
-                className="flex justify-between gap-2 items-center text-gray-300 mb-1.5 py-2.5 border-b border-white/10"
+                className="mb-1.5 flex items-center justify-between gap-2 border-b border-white/10 py-2.5 text-neutral-300"
               >
                 <div className="flex items-center gap-2 flex-grow min-w-0">
-                  <button
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
                     onClick={() => handleQuantityChange(item.id, -1)}
-                    className="flex h-8 w-8 items-center justify-center bg-white/10 border border-white/10 text-white rounded-xl hover:bg-white/15 flex-shrink-0 text-xs"
+                    className="flex-shrink-0 border-white/10 bg-white/5 text-white hover:bg-white/10"
                     aria-label={`Decrease quantity of ${item.name}`}
                     title={`Decrease quantity of ${item.name}`}
                   >
                     <FaMinus />
-                  </button>
-                  <span className="w-5 text-center flex-shrink-0 text-sm font-semibold text-white">{item.quantity}</span>
-                  <button
+                  </Button>
+                  <span className="w-5 flex-shrink-0 text-center text-sm font-semibold text-white">{item.quantity}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
                     onClick={() => handleQuantityChange(item.id, 1)}
-                    className="flex h-8 w-8 items-center justify-center bg-white/10 border border-white/10 text-white rounded-xl hover:bg-white/15 flex-shrink-0 text-xs"
+                    className="flex-shrink-0 border-white/10 bg-white/5 text-white hover:bg-white/10"
                     aria-label={`Increase quantity of ${item.name}`}
                     title={`Increase quantity of ${item.name}`}
                   >
                     <FaPlus />
-                  </button>
-                  <span className="ml-1 flex-shrink min-w-0 break-words text-sm leading-tight">{item.name}</span>
+                  </Button>
+                  <span className="ml-1 min-w-0 flex-shrink break-words text-sm leading-tight">{item.name}</span>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <div className="text-right whitespace-nowrap text-sm font-medium text-white">
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <div className="whitespace-nowrap text-right text-sm font-medium text-white">
                     R {((Number(item.price) || 0) * (Number(item.quantity) || 0)).toFixed(2)}
                   </div>
-                  <button
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
                     onClick={() => handleDeleteItem(item.id)}
-                    className="flex h-8 w-8 items-center justify-center bg-red-500/90 text-white rounded-xl hover:bg-red-500 text-xs"
+                    className="flex-shrink-0 border-red-400/20 bg-red-500/90 text-white hover:bg-red-500"
                     aria-label={`Remove ${item.name} from order`}
                     title={`Remove ${item.name} from order`}
                   >
                     <ImBin />
-                  </button>
+                  </Button>
                 </div>
               </li>
             ))
           ) : (
-            <p className="text-center text-neutral-500 py-6 text-sm">Your order is empty.</p>
+            <p className="py-6 text-center text-sm text-neutral-500">Your order is empty.</p>
           )}
         </ul>
       </div>
 
-      <div className="flex-shrink-0 border-t border-white/10 bg-neutral-900/85 backdrop-blur-md pt-2">
+      <div className="flex-shrink-0 border-t border-white/10 bg-neutral-900/85 pt-2 backdrop-blur-md">
         {appliedSpecials.length > 0 && (
           <div className="mt-2">
-            <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
+            <h3 className="flex items-center gap-1.5 text-xs font-semibold text-white">
               <FaGift className="text-green-500 text-xs" /> Applied Specials
             </h3>
-            <ul className="mt-1.5 text-xs text-gray-400">
+            <ul className="mt-1.5 text-xs text-neutral-400">
               {appliedSpecials.map((special, index) => (
                 <li
                   key={index}
-                  className="flex justify-between items-center py-1.5 border-b border-neutral-700"
+                  className="flex items-center justify-between border-b border-neutral-700 py-1.5"
                 >
                   <span className="text-xs">
                     {special.name}
@@ -183,7 +193,7 @@ export default function OrderCheckout() {
 
         <div className="pt-2">
           <hr className="my-2 border-neutral-700" />
-          <div className="flex justify-between text-xs text-gray-400">
+          <div className="flex justify-between text-xs text-neutral-400">
             <span>Subtotal</span>
             <span>R {totals.subtotalBeforeDiscount.toFixed(2)}</span>
           </div>
@@ -193,7 +203,7 @@ export default function OrderCheckout() {
               <span>-R {totals.specialsDiscount.toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between text-xs text-gray-400">
+          <div className="flex justify-between text-xs text-neutral-400">
             <span>Tax included ({(vat * 100).toFixed(0)}%)</span>
             <span>R {totals.tax.toFixed(2)}</span>
           </div>
@@ -201,13 +211,14 @@ export default function OrderCheckout() {
             <span>Total</span>
             <span>R {totals.total.toFixed(2)}</span>
           </div>
-          <button
-            className="mt-3 min-h-12 w-full bg-blue-500 text-white py-2 text-base font-semibold rounded-xl hover:bg-blue-600 transition-colors disabled:bg-neutral-600 disabled:cursor-not-allowed"
+          <Button
+            type="button"
+            className="mt-3 min-h-12 w-full rounded-xl bg-cyan-500 py-2 text-base font-semibold text-white hover:bg-cyan-600 disabled:bg-neutral-600"
             onClick={() => setShowConfirmation(true)}
             disabled={orderDetails.length === 0}
           >
             Checkout
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -1,17 +1,31 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState } from 'react';
 import { collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, doc, increment, arrayUnion, getDoc } from 'firebase/firestore';
 import { auth } from '../../utils/firebase';
 import db from '../../utils/firebase';
 import { buildSaleDocument, parseMoney, roundMoney } from '../../utils/pricing';
 import { getStoreId } from '../../utils/storeId';
 import { useAuthState } from 'react-firebase-hooks/auth';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) => {
-    const [user, loadingUser, errorUser] = useAuthState(auth); // Added loading/error states for user
-    const [staffAuth, setStaffAuth] = useState(null);
+    const [user, loadingUser] = useAuthState(auth);
+    const [staffAuth] = useState(() => {
+        if (typeof window === 'undefined') return null;
+
+        const authData = localStorage.getItem('staffAuth');
+        if (!authData) return null;
+
+        try {
+            return JSON.parse(authData);
+        } catch (e) {
+            console.error('Error parsing staffAuth from localStorage:', e);
+            return null;
+        }
+    });
     const [error, setError] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('');
     const [secondaryPaymentMethod, setSecondaryPaymentMethod] = useState('');
@@ -19,13 +33,14 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const [voucherCode, setVoucherCode] = useState('');
     const [processing, setProcessing] = useState(false);
     const [validatedVoucher, setValidatedVoucher] = useState(null);
-    const [calculatedTotal, setCalculatedTotal] = useState(totalPrice);
-    const [remainingAmount, setRemainingAmount] = useState(0);
-    const [showSecondaryPayment, setShowSecondaryPayment] = useState(false);
+    const [voucherDiscountAmount, setVoucherDiscountAmount] = useState(0);
     const [voucherDiscountedItems, setVoucherDiscountedItems] = useState([]);
 
     // FIX: Ensure totalPrice is always treated as a number
     const numericTotalPrice = parseFloat(totalPrice) || 0;
+    const calculatedTotal = Math.max(0, numericTotalPrice - voucherDiscountAmount);
+    const remainingAmount = calculatedTotal;
+    const showSecondaryPayment = voucherDiscountAmount > 0 && calculatedTotal > 0;
 
     const paymentMethods = [
         { id: 'card', name: 'Card', icon: '💳' },
@@ -39,27 +54,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         { id: 'cash', name: 'Cash', icon: '💵' },
         { id: 'snapscan', name: 'SnapScan', icon: '📱' }
     ];
-
-    useEffect(() => {
-        const authData = localStorage.getItem('staffAuth');
-        if (authData) {
-            try {
-                setStaffAuth(JSON.parse(authData));
-            } catch (e) {
-                console.error("Error parsing staffAuth from localStorage:", e);
-                // setError("Failed to load staff details. Please try again."); // Optional: inform user
-            }
-        }
-    }, []);
-
-    // Reset calculated total when totalPrice changes
-    useEffect(() => {
-        setCalculatedTotal(numericTotalPrice);
-        setValidatedVoucher(null);
-        setRemainingAmount(0);
-        setShowSecondaryPayment(false);
-        setVoucherDiscountedItems([]);
-    }, [numericTotalPrice]);
 
     if (!orderDetails || orderDetails.length === 0) {
         return null;
@@ -154,7 +148,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
             const voucherData = await validateVoucher(voucherCode);
             setValidatedVoucher(voucherData);
 
-            let newTotal = numericTotalPrice;
             let voucherDiscount = 0;
             let discountedItems = [];
 
@@ -186,7 +179,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                         discount: voucherDiscount
                     }];
                 }
-                newTotal = Math.max(0, numericTotalPrice - voucherDiscount);
             } else if (voucherData.voucherType === 'freeItem') {
                 // Free item logic (as before)
                 const freeItemId = typeof voucherData.freeItem === 'object' ? voucherData.freeItem.id : voucherData.freeItem;
@@ -199,7 +191,6 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                         name: freeItemInOrder.name,
                         discount: itemPrice
                     }];
-                    newTotal = Math.max(0, numericTotalPrice - voucherDiscount);
                 }
             } else if (voucherData.voucherType === 'value' || voucherData.voucherType === 'giftCard') {
                 // Value voucher (gift card)
@@ -210,27 +201,17 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     name: 'Voucher Value Used',
                     discount: voucherDiscount
                 }];
-                newTotal = Math.max(0, numericTotalPrice - voucherDiscount);
                 // Show remaining balance in UI if needed
             }
             // Add more voucher types as needed...
 
-            setCalculatedTotal(newTotal);
             setVoucherDiscountedItems(discountedItems);
+            setVoucherDiscountAmount(voucherDiscount);
 
-            if (newTotal > 0) {
-                setRemainingAmount(newTotal);
-                setShowSecondaryPayment(true);
-            } else {
-                setRemainingAmount(0);
-                setShowSecondaryPayment(false);
-            }
         } catch (error) {
             setError(error.message);
             setValidatedVoucher(null);
-            setCalculatedTotal(numericTotalPrice);
-            setRemainingAmount(0);
-            setShowSecondaryPayment(false);
+            setVoucherDiscountAmount(0);
             setVoucherDiscountedItems([]);
         }
     };
@@ -239,9 +220,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
     const clearVoucher = () => {
         setVoucherCode('');
         setValidatedVoucher(null);
-        setCalculatedTotal(numericTotalPrice);
-        setRemainingAmount(0);
-        setShowSecondaryPayment(false);
+        setVoucherDiscountAmount(0);
         setVoucherDiscountedItems([]);
     };
 
@@ -501,184 +480,203 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
 
     if (typeof document === 'undefined') return null;
 
-    return createPortal((
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm">
-        <div className="h-full w-full bg-neutral-900/95 text-neutral-50 border border-white/10 p-4 md:p-6 flex flex-col">
-          <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
-            <h2 className="text-2xl font-bold text-white">Checkout</h2>
-            <button
-              onClick={() => onClose(false)}
-              className="min-h-10 px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-sm hover:bg-white/15"
-            >
-              Close
-            </button>
-          </div>
+    return (
+      <Dialog open onOpenChange={(open) => { if (!open) onClose(false); }}>
+        <DialogContent className="h-[95vh] w-[min(96vw,1200px)] max-w-none overflow-hidden border-white/10 bg-neutral-900 p-0 text-neutral-50">
+          <div className="flex h-full min-h-0 flex-col bg-neutral-900/95 p-4 md:p-6">
+            <DialogHeader className="mb-4 border-b border-white/10 pb-3 text-left">
+              <DialogTitle className="text-2xl font-bold text-white">Checkout</DialogTitle>
+              <DialogDescription className="text-neutral-400">
+                Review the order and complete payment.
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)] gap-4 md:gap-6">
-            <div className="min-w-0 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-800/70 p-4">
-              {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold text-neutral-200">Order Summary</h3>
-                <ul className="my-2 divide-y divide-neutral-700">
-                  {orderDetails.map((item) => (
-                    <li key={item.id} className="flex justify-between gap-4 py-2.5 text-neutral-300">
-                      <span className="min-w-0 break-words">{item.name} {item.size && `(${item.size})`}</span>
-                      <span className="shrink-0 whitespace-nowrap">R{parseFloat(item.price).toFixed(2)} x {item.quantity}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="border-t border-neutral-700 pt-2 space-y-1">
-                  <div className="flex justify-between font-semibold text-neutral-300">
-                    <span>Subtotal</span>
-                    <span>R{subtotalBeforeDiscounts.toFixed(2)}</span>
-                  </div>
-                  {appliedSpecials && appliedSpecials.length > 0 && (
-                    <div className="text-sm text-green-400">
-                      <div className="flex justify-between font-semibold mb-1">
-                        <span>Specials Applied:</span>
-                        <span>-R{specialsDiscount.toFixed(2)}</span>
-                      </div>
-                      {appliedSpecials.map((special, index) => (
-                        <div key={index} className="flex justify-between text-xs text-green-300 ml-2">
-                          <span>
-                            • {special.name}
-                            {special.instanceNumber && special.totalInstances && (
-                              <span className="text-neutral-400"> (#{special.instanceNumber})</span>
-                            )}
-                          </span>
-                          <span>-R{parseFloat(special.savedAmount || 0).toFixed(2)}</span>
+            <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)] md:gap-6">
+              <div className="min-w-0 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-800/70 p-4">
+                {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-neutral-200">Order Summary</h3>
+                  <ul className="my-2 divide-y divide-neutral-700">
+                    {orderDetails.map((item) => (
+                      <li key={item.id} className="flex justify-between gap-4 py-2.5 text-neutral-300">
+                        <span className="min-w-0 break-words">
+                          {item.name} {item.size && `(${item.size})`}
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap">
+                          R{parseFloat(item.price).toFixed(2)} x {item.quantity}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="space-y-1 border-t border-neutral-700 pt-2">
+                    <div className="flex justify-between font-semibold text-neutral-300">
+                      <span>Subtotal</span>
+                      <span>R{subtotalBeforeDiscounts.toFixed(2)}</span>
+                    </div>
+                    {appliedSpecials && appliedSpecials.length > 0 && (
+                      <div className="text-sm text-green-400">
+                        <div className="mb-1 flex justify-between font-semibold">
+                          <span>Specials Applied:</span>
+                          <span>-R{specialsDiscount.toFixed(2)}</span>
                         </div>
-                      ))}
+                        {appliedSpecials.map((special, index) => (
+                          <div key={index} className="ml-2 flex justify-between text-xs text-green-300">
+                            <span>
+                              • {special.name}
+                              {special.instanceNumber && special.totalInstances && (
+                                <span className="text-neutral-400"> (#{special.instanceNumber})</span>
+                              )}
+                            </span>
+                            <span>-R{parseFloat(special.savedAmount || 0).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {validatedVoucher && voucherDiscountedItems.length > 0 && (
+                      <div className="flex justify-between text-sm text-yellow-400">
+                        <span>Voucher: {validatedVoucher.name || validatedVoucher.code}</span>
+                        <span>
+                          -R{voucherDiscountedItems.reduce((sum, item) => sum + (item.discount || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="mt-2 flex justify-between text-xl font-bold text-white">
+                      <span>Total</span>
+                      <span>R{Number(calculatedTotal).toFixed(2)}</span>
                     </div>
-                  )}
-                  {validatedVoucher && voucherDiscountedItems.length > 0 && (
-                    <div className="flex justify-between text-sm text-yellow-400">
-                      <span>Voucher: {validatedVoucher.name || validatedVoucher.code}</span>
-                      <span>-R{voucherDiscountedItems.reduce((sum, item) => sum + (item.discount || 0), 0).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold mt-2 text-xl text-white">
-                    <span>Total</span>
-                    <span>R{Number(calculatedTotal).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="min-w-0 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-800/70 p-4 flex flex-col justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-neutral-200">Payment</h3>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  {paymentMethods.map(method => (
-                    <button
-                      key={method.id}
-                      onClick={() => setPaymentMethod(method.id)}
-                      className={`min-h-14 px-4 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                        paymentMethod === method.id ? 'bg-blue-500 text-white' : 'bg-white/10 border border-white/10 text-neutral-300 hover:bg-white/15'
-                      }`}
-                    >
-                      <span className="text-xl">{method.icon}</span>
-                      {method.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {paymentMethod === 'cash' && !showSecondaryPayment && (
-                <div className="mb-4 p-4 bg-neutral-900/50 rounded-xl mt-4 border border-white/10">
-                  <label className="block text-sm font-medium text-neutral-400">Cash Received</label>
-                  <input
-                    type="number"
-                    value={cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
-                    className="mt-1 block min-h-12 w-full px-4 py-2 border border-white/10 bg-white/10 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter cash amount from customer"
-                  />
-                </div>
-              )}
-
-              {paymentMethod === 'voucher' && (
-                <div className="mb-4 p-4 bg-neutral-900/50 rounded-xl mt-4 border border-white/10">
-                  <h3 className="text-lg font-semibold text-neutral-200">Voucher Code</h3>
-                  <div className="flex gap-2 mt-2">
-                    <input
-                      type="text"
-                      value={voucherCode}
-                      onChange={(e) => setVoucherCode(e.target.value)}
-                      className="flex-1 min-h-12 px-4 py-2 border border-white/10 bg-white/10 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter voucher code"
-                    />
-                    <button
-                      onClick={applyVoucher}
-                      className="min-h-12 px-4 py-2 bg-blue-500 text-white rounded-xl font-semibold transition-all hover:bg-blue-600"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                  {validatedVoucher && (
-                    <div className="mt-2">
-                      <button onClick={clearVoucher} className="text-red-400 text-sm underline">
-                        Clear Voucher
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showSecondaryPayment && (
-                <div className="mb-4 p-4 bg-neutral-900/50 rounded-xl mt-4 border border-white/10">
-                  <h3 className="text-lg font-semibold text-neutral-200">Secondary Payment</h3>
-                  <div className="grid grid-cols-3 gap-2 mt-2">
-                    {secondaryPaymentMethods.map(method => (
-                      <button
+              <div className="flex min-w-0 flex-col justify-between overflow-y-auto rounded-2xl border border-white/10 bg-neutral-800/70 p-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-neutral-200">Payment</h3>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {paymentMethods.map((method) => (
+                      <Button
                         key={method.id}
-                        onClick={() => setSecondaryPaymentMethod(method.id)}
-                        className={`min-h-12 px-4 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                          secondaryPaymentMethod === method.id ? 'bg-blue-500 text-white' : 'bg-white/10 border border-white/10 text-neutral-300 hover:bg-white/15'
+                        type="button"
+                        onClick={() => setPaymentMethod(method.id)}
+                        variant={paymentMethod === method.id ? 'default' : 'outline'}
+                        className={`min-h-14 justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition-all ${
+                          paymentMethod === method.id
+                            ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                            : 'border-white/10 bg-white/10 text-neutral-300 hover:bg-white/15'
                         }`}
                       >
                         <span className="text-xl">{method.icon}</span>
                         {method.name}
-                      </button>
+                      </Button>
                     ))}
                   </div>
-                  {secondaryPaymentMethod === 'cash' && (
-                    <div className="mt-2">
-                      <label className="block text-sm font-medium text-neutral-400">Cash Received</label>
-                      <input
-                        type="number"
-                        value={cashReceived}
-                        onChange={(e) => setCashReceived(e.target.value)}
-                        className="mt-1 block min-h-12 w-full px-4 py-2 border border-white/10 bg-white/10 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter cash received"
-                      />
-                    </div>
-                  )}
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 mt-6 border-t border-neutral-700 pt-4 gap-2">
-                <button
-                  onClick={() => onClose(false)}
-                  className="min-h-12 px-6 py-2 bg-white/10 border border-white/10 text-neutral-200 rounded-xl font-semibold transition-all hover:bg-white/15"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleConfirm(paymentMethod)}
-                  className={`min-h-12 px-6 py-2 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                    processing || !paymentMethod ? 'bg-blue-900/60 text-neutral-400 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'
-                  }`}
-                  disabled={processing || !paymentMethod}
-                >
-                  {getPaymentButtonText()}
-                </button>
+                {paymentMethod === 'cash' && !showSecondaryPayment && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-neutral-900/50 p-4">
+                    <label className="block text-sm font-medium text-neutral-400">Cash Received</label>
+                    <Input
+                      type="number"
+                      value={cashReceived}
+                      onChange={(e) => setCashReceived(e.target.value)}
+                      className="mt-1 block min-h-12 w-full border-white/10 bg-white/10 px-4 py-2 text-white focus-visible:border-cyan-300/50 focus-visible:ring-cyan-400/20"
+                      placeholder="Enter cash amount from customer"
+                    />
+                  </div>
+                )}
+
+                {paymentMethod === 'voucher' && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-neutral-900/50 p-4">
+                    <h3 className="text-lg font-semibold text-neutral-200">Voucher Code</h3>
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        type="text"
+                        value={voucherCode}
+                        onChange={(e) => setVoucherCode(e.target.value)}
+                        className="flex-1 min-h-12 border-white/10 bg-white/10 px-4 py-2 text-white focus-visible:border-cyan-300/50 focus-visible:ring-cyan-400/20"
+                        placeholder="Enter voucher code"
+                      />
+                      <Button
+                        type="button"
+                        onClick={applyVoucher}
+                        className="min-h-12 rounded-xl bg-cyan-500 px-4 py-2 font-semibold text-white transition-all hover:bg-cyan-600"
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                    {validatedVoucher && (
+                      <div className="mt-2">
+                        <button onClick={clearVoucher} className="text-sm text-red-400 underline">
+                          Clear Voucher
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {showSecondaryPayment && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-neutral-900/50 p-4">
+                    <h3 className="text-lg font-semibold text-neutral-200">Secondary Payment</h3>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {secondaryPaymentMethods.map((method) => (
+                        <Button
+                          key={method.id}
+                          type="button"
+                          onClick={() => setSecondaryPaymentMethod(method.id)}
+                          variant={secondaryPaymentMethod === method.id ? 'default' : 'outline'}
+                          className={`min-h-12 justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition-all ${
+                            secondaryPaymentMethod === method.id
+                              ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                              : 'border-white/10 bg-white/10 text-neutral-300 hover:bg-white/15'
+                          }`}
+                        >
+                          <span className="text-xl">{method.icon}</span>
+                          {method.name}
+                        </Button>
+                      ))}
+                    </div>
+                    {secondaryPaymentMethod === 'cash' && (
+                      <div className="mt-2">
+                        <label className="block text-sm font-medium text-neutral-400">Cash Received</label>
+                        <Input
+                          type="number"
+                          value={cashReceived}
+                          onChange={(e) => setCashReceived(e.target.value)}
+                          className="mt-1 block min-h-12 w-full border-white/10 bg-white/10 px-4 py-2 text-white focus-visible:border-cyan-300/50 focus-visible:ring-cyan-400/20"
+                          placeholder="Enter cash received"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <DialogFooter className="mt-6 grid grid-cols-2 gap-2 border-t border-neutral-700 pt-4 sm:justify-stretch">
+                  <Button
+                    type="button"
+                    onClick={() => onClose(false)}
+                    variant="outline"
+                    className="min-h-12 rounded-xl border-white/10 bg-white/10 px-6 py-2 font-semibold text-neutral-200 transition-all hover:bg-white/15"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => handleConfirm(paymentMethod)}
+                    className={`min-h-12 justify-center gap-2 rounded-xl px-6 py-2 font-semibold transition-all ${
+                      processing || !paymentMethod
+                        ? 'cursor-not-allowed bg-blue-900/60 text-neutral-400'
+                        : 'bg-cyan-500 text-white hover:bg-cyan-600'
+                    }`}
+                    disabled={processing || !paymentMethod}
+                  >
+                    {getPaymentButtonText()}
+                  </Button>
+                </DialogFooter>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    ), document.body);
+        </DialogContent>
+      </Dialog>
+    );
 };
 
 export default ConfirmOrder;
