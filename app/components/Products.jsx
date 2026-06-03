@@ -1,6 +1,22 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { FaCheck, FaSearch, FaShoppingCart } from 'react-icons/fa';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import db from '../../utils/firebase';
+import { auth } from '../../utils/firebase';
 
 const ADD_DEBOUNCE_MS = 400;
 const PRODUCT_SKELETON_COUNT = 24;
@@ -20,14 +36,8 @@ function normalizeOrderLines(lines) {
   }
   return Array.from(byId.values());
 }
-import db from '../../utils/firebase';
-import { auth } from '../../utils/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { FaSearch, FaCheck, FaShoppingCart } from 'react-icons/fa';
 
 
-// Toast Notification Component
 const Toast = ({ message, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 2000);
@@ -35,8 +45,8 @@ const Toast = ({ message, onClose }) => {
   }, [onClose]);
 
   return (
-      <div className="fixed top-3 right-3 z-50 animate-slide-in">
-      <div className="bg-emerald-500/90 backdrop-blur-xl text-white px-4 py-2 rounded-xl border border-white/10 shadow-lg flex items-center gap-2">
+    <div className="fixed right-3 top-3 z-50 animate-slide-in">
+      <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-emerald-500/90 px-4 py-2 text-white shadow-lg backdrop-blur-xl">
         <FaCheck className="text-sm" />
         <span className="text-sm font-medium">{message}</span>
       </div>
@@ -44,7 +54,7 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
+const VarietySelectionModal = ({ product, onOpenChange, onSelectVariety }) => {
   const [selectedVariety, setSelectedVariety] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -63,62 +73,63 @@ const VarietySelectionModal = ({ product, onClose, onSelectVariety }) => {
     if (!selectedVariety || isAdding) return;
     setIsAdding(true);
     onSelectVariety(selectedVariety.name, selectedVariety.price);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4 pb-4 animate-fade-in">
-      <div className="bg-neutral-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-md text-white transform transition-all">
-        <div className="text-center mb-6">
-          <h3 className="text-2xl font-bold mb-2">{product.name}</h3>
-          <p className="text-neutral-400 text-sm">Select your size</p>
-        </div>
-        
-        <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+    <Dialog open={Boolean(product)} onOpenChange={onOpenChange}>
+      <DialogContent key={product.id} className="max-w-md border-white/10 bg-neutral-900 text-white">
+        <DialogHeader className="text-left">
+          <DialogTitle className="text-xl">{product.name}</DialogTitle>
+          <DialogDescription className="text-neutral-400">Select your size</DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
           {varieties.map(([varietyName, price]) => {
             const isSelected = selectedVariety?.name === varietyName;
+
             return (
               <button
                 key={varietyName}
-                onClick={() => setSelectedVariety({ name: varietyName, price: price })}
-                className={`w-full flex items-center justify-between p-4 rounded-lg cursor-pointer transition-all ${
+                onClick={() => setSelectedVariety({ name: varietyName, price })}
+                className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition-all ${
                   isSelected
-                    ? 'bg-blue-500 ring-2 ring-blue-300 shadow-lg scale-105'
-                    : 'bg-white/10 hover:bg-white/15 border border-white/10'
+                    ? 'border-cyan-300/40 bg-cyan-400/15 shadow-lg shadow-cyan-500/10'
+                    : 'border-white/10 bg-white/5 hover:bg-white/10'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                    isSelected ? 'border-white bg-white' : 'border-neutral-400'
-                  }`}>
-                    {isSelected && <FaCheck className="text-indigo-600 text-xs" />}
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                      isSelected ? 'border-white bg-white' : 'border-neutral-400'
+                    }`}
+                  >
+                    {isSelected && <FaCheck className="text-xs text-neutral-900" />}
                   </div>
-                  <span className="text-lg font-medium">{varietyName}</span>
+                  <span className="text-base font-medium">{varietyName}</span>
                 </div>
-                <span className="text-xl font-bold text-green-400">R {safeFormatPrice(price)}</span>
+                <span className="text-sm font-semibold text-emerald-300">R {safeFormatPrice(price)}</span>
               </button>
             );
           })}
         </div>
-        
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 bg-white/10 border border-white/10 text-white py-3 px-4 rounded-xl hover:bg-white/15 transition-colors font-medium"
-          >
+
+        <DialogFooter className="sm:justify-between">
+          <Button type="button" variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => onOpenChange(false)}>
             Cancel
-          </button>
-          <button
-            onClick={handleSelect}
+          </Button>
+          <Button
+            type="button"
+            className="gap-2 bg-cyan-500 text-white hover:bg-cyan-600"
             disabled={!selectedVariety || isAdding}
-            className="flex-1 bg-blue-500 text-white py-3 px-4 rounded-xl hover:bg-blue-600 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+            onClick={handleSelect}
           >
             <FaShoppingCart />
             Add to Order
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -278,22 +289,25 @@ const Products = () => {
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
       {/* Category Tabs Section */}
-      <div className="flex-shrink-0 bg-neutral-900/55 backdrop-blur-xl border-b border-white/10 shadow-lg">
+      <div className="flex-shrink-0 border-b border-white/10 bg-neutral-900/55 shadow-lg backdrop-blur-xl">
         <div className="px-4 py-3">
           {/* Category Tabs */}
           <div className="flex flex-wrap gap-2">
             {categories.map((category) => (
-              <button
+              <Button
                 key={category}
+                type="button"
                 onClick={() => setSelectedCategory(category)}
-                className={`min-h-11 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                variant={selectedCategory === category ? 'default' : 'outline'}
+                size="sm"
+                className={`min-h-11 whitespace-nowrap rounded-xl px-4 text-sm font-medium ${
                   selectedCategory === category
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25'
-                    : 'bg-white/10 border border-white/10 text-neutral-300 hover:bg-white/15'
+                    ? 'shadow-lg shadow-cyan-500/20'
+                    : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
                 }`}
               >
                 {category}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -301,21 +315,24 @@ const Products = () => {
         {/* Search Bar */}
         <div className="px-4 pb-4">
           <div className="relative max-w-2xl mx-auto">
-            <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 text-lg" />
-            <input
+            <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg text-neutral-400" />
+            <Input
               type="text"
               placeholder="Search products by name or description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full min-h-12 pl-12 pr-12 py-3 rounded-full text-base bg-white/10 text-white border border-white/10 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all placeholder-neutral-500"
+              className="h-12 rounded-full border-white/10 bg-white/10 pl-12 pr-12 text-base text-white placeholder:text-neutral-500 focus-visible:border-cyan-300/50 focus-visible:ring-cyan-400/20"
             />
             {searchQuery && (
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-neutral-400 hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full text-neutral-400 hover:text-white"
               >
                 ✕
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -330,9 +347,9 @@ const Products = () => {
                 key={`product-skeleton-${index}`}
                 className="min-h-24 rounded-xl border border-white/10 bg-neutral-800/70 p-3"
               >
-                <div className="h-3 w-3/4 rounded bg-neutral-700/90 animate-pulse" />
-                <div className="mt-1.5 h-3 w-1/2 rounded bg-neutral-700/80 animate-pulse" />
-                <div className="mt-5 h-3 w-2/5 rounded bg-neutral-700/70 animate-pulse" />
+                <Skeleton className="h-3 w-3/4 rounded-full bg-neutral-700/90" />
+                <Skeleton className="mt-1.5 h-3 w-1/2 rounded-full bg-neutral-700/80" />
+                <Skeleton className="mt-5 h-3 w-2/5 rounded-full bg-neutral-700/70" />
               </div>
             ))}
           </div>
@@ -348,12 +365,14 @@ const Products = () => {
                 }
               </p>
               {searchQuery && (
-                <button
+                <Button
+                  type="button"
+                  variant="default"
                   onClick={() => setSearchQuery('')}
-                  className="mt-3 px-4 py-2 text-sm bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+                  className="mt-3 rounded-xl bg-cyan-500 text-white hover:bg-cyan-600"
                 >
                   Clear Search
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -369,7 +388,7 @@ const Products = () => {
                   type="button"
                   onClick={() => handleProductClick(product)}
                   disabled={isJustAdded}
-                  className={`relative flex min-h-24 flex-col bg-neutral-800/90 border rounded-xl p-3 transition-all duration-200 hover:shadow-xl hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:pointer-events-none disabled:opacity-80 ${
+                  className={`relative flex min-h-24 flex-col rounded-xl border bg-neutral-800/90 p-3 transition-all duration-200 hover:border-cyan-400 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:pointer-events-none disabled:opacity-80 ${
                     isJustAdded 
                       ? 'border-green-500 bg-green-900/20' 
                       : 'border-white/10'
@@ -414,13 +433,14 @@ const Products = () => {
       </div>
 
       {/* Conditionally render the modal */}
-      {isSizeModalOpen && selectedCoffee && (
-        <VarietySelectionModal
-          product={selectedCoffee}
-          onClose={handleCloseModal}
-          onSelectVariety={handleSelectVariety}
-        />
-      )}
+      <VarietySelectionModal
+        product={isSizeModalOpen && selectedCoffee ? selectedCoffee : null}
+        onOpenChange={(open) => {
+          if (!open) handleCloseModal();
+          else setIsSizeModalOpen(true);
+        }}
+        onSelectVariety={handleSelectVariety}
+      />
     </div>
   );
 };
