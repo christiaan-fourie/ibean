@@ -7,6 +7,13 @@ import { FaCalendarAlt, FaEdit, FaStar } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import db from '../../../utils/firebase';
 import RouteGuard from '../../components/RouteGuard';
 import { getStoreId, documentBelongsToStore } from '../../../utils/storeId';
@@ -16,7 +23,6 @@ import ToastNotification from '../../components/ToastNotification';
 
 const initialSpecialState = {
   name: '',
-  description: '',
   active: true,
   mutuallyExclusive: false,
   triggerType: 'product',
@@ -58,6 +64,21 @@ const toDateInputValue = (value) => {
   }
   return '';
 };
+
+const SpecialSelect = ({ value, onValueChange, placeholder, options, className }) => (
+  <Select value={value || ''} onValueChange={onValueChange}>
+    <SelectTrigger className={className}>
+      <SelectValue placeholder={placeholder} />
+    </SelectTrigger>
+    <SelectContent>
+      {options.map((option) => (
+        <SelectItem key={option.value} value={option.value}>
+          {option.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+);
 
 export default function Specials() {
   const { data: specialsData, error: specialsError } = useCollectionLive('specials');
@@ -127,6 +148,38 @@ export default function Specials() {
 
     setNewSpecial((prev) => {
       const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
+
+      if (name === 'triggerType') {
+        updated.triggerProduct = '';
+        updated.triggerProductSize = '';
+        updated.triggerCategory = '';
+        updated.triggerCategorySize = '';
+      }
+
+      if (name === 'rewardType') {
+        updated.rewardProduct = '';
+        updated.rewardProductSize = '';
+        updated.rewardCategory = '';
+        updated.rewardCategorySize = '';
+      }
+
+      if (name === 'triggerProduct' || name === 'triggerCategory') {
+        updated.triggerProductSize = '';
+        updated.triggerCategorySize = '';
+      }
+
+      if (name === 'rewardProduct' || name === 'rewardCategory') {
+        updated.rewardProductSize = '';
+        updated.rewardCategorySize = '';
+      }
+
+      return updated;
+    });
+  };
+
+  const handleSelectChange = (name, value) => {
+    setNewSpecial((prev) => {
+      const updated = { ...prev, [name]: value };
 
       if (name === 'triggerType') {
         updated.triggerProduct = '';
@@ -258,14 +311,13 @@ export default function Specials() {
     if (varieties.length === 0) return null;
 
     return (
-      <select name={`${field}Size`} value={value} onChange={onChange} className={selectClass}>
-        <option value="">Any size</option>
-        {varieties.map((variety) => (
-          <option key={variety} value={variety}>
-            {variety}
-          </option>
-        ))}
-      </select>
+      <SpecialSelect
+        value={value}
+        onValueChange={(nextValue) => onChange({ target: { name: `${field}Size`, value: nextValue, type: 'select' } })}
+        placeholder="Any size"
+        className={selectClass}
+        options={varieties.map((variety) => ({ value: variety, label: variety }))}
+      />
     );
   };
 
@@ -317,58 +369,39 @@ export default function Specials() {
                   className={fieldClass}
                   required
                 />
-                <Input
-                  type="text"
-                  name="description"
-                  value={newSpecial.description}
-                  onChange={handleChange}
-                  placeholder="Description"
-                  className={fieldClass}
-                />
               </div>
 
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <h3 className="text-sm font-semibold text-cyan-200">Trigger Conditions</h3>
                   <div className="mt-3 space-y-3">
-                    <select
-                      name="triggerType"
+                    <SpecialSelect
                       value={newSpecial.triggerType}
-                      onChange={handleChange}
+                      onValueChange={(value) => handleSelectChange('triggerType', value)}
+                      placeholder="Choose trigger"
                       className={selectClass}
-                    >
-                      <option value="product">Specific Product</option>
-                      <option value="category">Any Product in Category</option>
-                    </select>
+                      options={[
+                        { value: 'product', label: 'Specific Product' },
+                        { value: 'category', label: 'Any Product in Category' },
+                      ]}
+                    />
 
                     {newSpecial.triggerType === 'product' ? (
-                      <select
-                        name="triggerProduct"
+                      <SpecialSelect
                         value={newSpecial.triggerProduct}
-                        onChange={handleChange}
+                        onValueChange={(value) => handleSelectChange('triggerProduct', value)}
+                        placeholder="Select product..."
                         className={selectClass}
-                      >
-                        <option value="">Select product...</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={products.map((product) => ({ value: product.id, label: product.name }))}
+                      />
                     ) : (
-                      <select
-                        name="triggerCategory"
+                      <SpecialSelect
                         value={newSpecial.triggerCategory}
-                        onChange={handleChange}
+                        onValueChange={(value) => handleSelectChange('triggerCategory', value)}
+                        placeholder="Select category..."
                         className={selectClass}
-                      >
-                        <option value="">Select category...</option>
-                        {categories.map((category) => (
-                          <option key={category.id || category.name} value={category.name}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={categories.map((category) => ({ value: category.name, label: category.name }))}
+                      />
                     )}
 
                     {newSpecial.triggerType === 'product'
@@ -391,44 +424,33 @@ export default function Specials() {
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <h3 className="text-sm font-semibold text-emerald-200">Reward Conditions</h3>
                   <div className="mt-3 space-y-3">
-                    <select
-                      name="rewardType"
+                    <SpecialSelect
                       value={newSpecial.rewardType}
-                      onChange={handleChange}
+                      onValueChange={(value) => handleSelectChange('rewardType', value)}
+                      placeholder="Choose reward"
                       className={selectClass}
-                    >
-                      <option value="product">Specific Product</option>
-                      <option value="category">Any Product in Category</option>
-                    </select>
+                      options={[
+                        { value: 'product', label: 'Specific Product' },
+                        { value: 'category', label: 'Any Product in Category' },
+                      ]}
+                    />
 
                     {newSpecial.rewardType === 'product' ? (
-                      <select
-                        name="rewardProduct"
+                      <SpecialSelect
                         value={newSpecial.rewardProduct}
-                        onChange={handleChange}
+                        onValueChange={(value) => handleSelectChange('rewardProduct', value)}
+                        placeholder="Select product..."
                         className={selectClass}
-                      >
-                        <option value="">Select product...</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={products.map((product) => ({ value: product.id, label: product.name }))}
+                      />
                     ) : (
-                      <select
-                        name="rewardCategory"
+                      <SpecialSelect
                         value={newSpecial.rewardCategory}
-                        onChange={handleChange}
+                        onValueChange={(value) => handleSelectChange('rewardCategory', value)}
+                        placeholder="Select category..."
                         className={selectClass}
-                      >
-                        <option value="">Select category...</option>
-                        {categories.map((category) => (
-                          <option key={category.id || category.name} value={category.name}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
+                        options={categories.map((category) => ({ value: category.name, label: category.name }))}
+                      />
                     )}
 
                     {newSpecial.rewardType === 'product'
@@ -452,16 +474,17 @@ export default function Specials() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <h3 className="text-sm font-semibold text-amber-200">Discount Settings</h3>
                 <div className="mt-3 space-y-3">
-                  <select
-                    name="discountType"
+                  <SpecialSelect
                     value={newSpecial.discountType}
-                    onChange={handleChange}
+                    onValueChange={(value) => handleSelectChange('discountType', value)}
+                    placeholder="Choose discount"
                     className={selectClass}
-                  >
-                    <option value="free">Free</option>
-                    <option value="percentage">Percentage Discount</option>
-                    <option value="fixed">Fixed Amount Discount</option>
-                  </select>
+                    options={[
+                      { value: 'free', label: 'Free' },
+                      { value: 'percentage', label: 'Percentage Discount' },
+                      { value: 'fixed', label: 'Fixed Amount Discount' },
+                    ]}
+                  />
 
                   {newSpecial.discountType === 'percentage' && (
                     <Input
@@ -675,9 +698,6 @@ export default function Specials() {
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 text-sm text-neutral-400">
-                          {special.description || 'No description provided.'}
-                        </p>
                         <div className="mt-3 space-y-2 text-sm text-neutral-200">
                           <p>
                             <span className="font-semibold text-cyan-200">Buy:</span> {special.triggerQuantity} x{' '}
