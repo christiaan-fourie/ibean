@@ -59,6 +59,57 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
         return null;
     }
 
+    const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+    const getItemVariant = (item) => {
+        if (!item) return '';
+        if (item.size) return String(item.size);
+        if (item.variety) return String(item.variety);
+        if (item.selectedVariety) return String(item.selectedVariety);
+
+        const itemId = String(item.id || '');
+        if (itemId.includes('_')) {
+            return itemId.split('_').slice(1).join('_');
+        }
+
+        return '';
+    };
+
+    const getFreeItemVoucherTarget = (voucherData, items) => {
+        if (!voucherData?.freeItem || !Array.isArray(items)) {
+            return null;
+        }
+
+        const freeItem =
+            typeof voucherData.freeItem === 'object'
+                ? voucherData.freeItem
+                : { type: 'product', id: voucherData.freeItem, name: '', variety: '' };
+
+        const requiredVariant = normalizeText(freeItem.variety || freeItem.variant || '');
+
+        if (freeItem.type === 'category') {
+            const categoryName = normalizeText(freeItem.name || freeItem.id);
+            const matchingItems = items
+                .filter((item) => normalizeText(item.category) === categoryName)
+                .filter((item) => {
+                    if (!requiredVariant) return true;
+                    return normalizeText(getItemVariant(item)) === requiredVariant;
+                })
+                .sort((a, b) => (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0));
+
+            return matchingItems[0] || null;
+        }
+
+        const freeItemId = freeItem.id || '';
+        return items.find((item) => {
+            if (!item?.id) return false;
+            const idMatches = item.id === freeItemId || item.id.startsWith(`${freeItemId}_`);
+            if (!idMatches) return false;
+            if (!requiredVariant) return true;
+            return normalizeText(getItemVariant(item)) === requiredVariant;
+        }) || null;
+    };
+
     const validateVoucher = async (code) => {
         // Ensure db is initialized
         if (!db) {
@@ -132,6 +183,13 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                 throw new Error('This voucher cannot be used at this location.');
             }
         }
+
+        if (voucherData.voucherType === 'freeItem') {
+            const freeItemTarget = getFreeItemVoucherTarget(voucherData, orderDetails);
+            if (!freeItemTarget) {
+                throw new Error('This voucher can only be applied to matching items in your cart.');
+            }
+        }
         
         return voucherData;
     };
@@ -180,9 +238,7 @@ const ConfirmOrder = ({ orderDetails, totalPrice, appliedSpecials, onClose }) =>
                     }];
                 }
             } else if (voucherData.voucherType === 'freeItem') {
-                // Free item logic (as before)
-                const freeItemId = typeof voucherData.freeItem === 'object' ? voucherData.freeItem.id : voucherData.freeItem;
-                const freeItemInOrder = orderDetails.find(item => item.id === freeItemId);
+                const freeItemInOrder = getFreeItemVoucherTarget(voucherData, orderDetails);
                 if (freeItemInOrder) {
                     const itemPrice = parseFloat(freeItemInOrder.price) || 0;
                     voucherDiscount = itemPrice;
