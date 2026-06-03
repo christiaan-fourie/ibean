@@ -592,7 +592,7 @@ export default function Reports() {
 
     return (
         <RouteGuard requiredRoles={['manager', 'staff']}>
-            <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-900/35 p-3 text-neutral-50 md:p-4">
+            <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-neutral-900/35 p-3 text-neutral-50 md:p-4">
                 <div className="mb-3 rounded-3xl border border-white/10 bg-neutral-900/60 p-4 shadow-xl backdrop-blur-2xl md:p-6">
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
                         <section className="rounded-3xl border border-white/10 bg-white/5 p-3 shadow-lg shadow-black/10">
@@ -683,11 +683,11 @@ export default function Reports() {
                         {loading && (<div className="mt-4 rounded-2xl border border-blue-500/40 bg-blue-600/20 p-3 text-sm text-white">Loading and processing data... Please wait.</div>)}
                     </div>
                     
-                <div className="min-h-0 flex-1 overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/60 shadow-xl backdrop-blur-2xl">
+                <div className="rounded-3xl border border-white/10 bg-neutral-900/60 shadow-xl backdrop-blur-2xl">
                     {!loading && !error && (
                         <div
                             id="report-content"
-                            className="h-full min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6"
+                            className="p-3 sm:p-4 md:p-6"
                         >
                             <h2 className="mb-4 flex flex-col gap-2 text-lg font-semibold text-white sm:flex-row sm:items-center sm:text-xl">
                                 Analysis Report:
