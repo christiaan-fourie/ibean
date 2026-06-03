@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { FaCalendarAlt, FaEdit, FaStar, FaTrashAlt } from 'react-icons/fa';
+import { FaCalendarAlt, FaEdit, FaStar } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ const initialSpecialState = {
   discountType: 'free',
   discountValue: 100,
   fixedDiscountAmount: 0,
+  validityMode: 'forever',
   startDate: '',
   endDate: '',
 };
@@ -156,10 +157,12 @@ export default function Specials() {
   };
 
   const handleStartEdit = (special) => {
+    const hasDateRange = Boolean(special.startDate || special.endDate);
     setEditingId(special.id);
     setNewSpecial({
       ...initialSpecialState,
       ...special,
+      validityMode: hasDateRange ? 'range' : 'forever',
       startDate: toDateInputValue(special.startDate),
       endDate: toDateInputValue(special.endDate),
     });
@@ -206,12 +209,17 @@ export default function Specials() {
         specialData.fixedDiscountAmount = parseFloat(newSpecial.fixedDiscountAmount) || 0;
       }
 
-      if (specialData.startDate) {
-        specialData.startDate = Timestamp.fromDate(new Date(`${specialData.startDate}T00:00:00`));
-      }
+      if (newSpecial.validityMode === 'range') {
+        if (specialData.startDate) {
+          specialData.startDate = Timestamp.fromDate(new Date(`${specialData.startDate}T00:00:00`));
+        }
 
-      if (specialData.endDate) {
-        specialData.endDate = Timestamp.fromDate(new Date(`${specialData.endDate}T23:59:59`));
+        if (specialData.endDate) {
+          specialData.endDate = Timestamp.fromDate(new Date(`${specialData.endDate}T23:59:59`));
+        }
+      } else {
+        delete specialData.startDate;
+        delete specialData.endDate;
       }
 
       if (editingId) {
@@ -298,7 +306,7 @@ export default function Specials() {
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col space-y-4">
+            <form onSubmit={handleSubmit} className="flex h-[calc(100%-3.25rem)] min-h-0 flex-col gap-4 overflow-y-auto pr-1">
               <div className="grid gap-3">
                 <Input
                   type="text"
@@ -485,22 +493,62 @@ export default function Specials() {
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <h3 className="mb-2 text-sm font-semibold text-blue-200">Validity period</h3>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <Input
-                    type="date"
-                    name="startDate"
-                    value={newSpecial.startDate}
-                    onChange={handleChange}
-                    className={fieldClass}
-                  />
-                  <Input
-                    type="date"
-                    name="endDate"
-                    value={newSpecial.endDate}
-                    onChange={handleChange}
-                    className={fieldClass}
-                  />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={newSpecial.validityMode === 'forever' ? 'default' : 'outline'}
+                    onClick={() =>
+                      setNewSpecial((prev) => ({
+                        ...prev,
+                        validityMode: 'forever',
+                        startDate: '',
+                        endDate: '',
+                      }))
+                    }
+                    className={
+                      newSpecial.validityMode === 'forever'
+                        ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                        : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                    }
+                  >
+                    Forever
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={newSpecial.validityMode === 'range' ? 'default' : 'outline'}
+                    onClick={() =>
+                      setNewSpecial((prev) => ({
+                        ...prev,
+                        validityMode: 'range',
+                      }))
+                    }
+                    className={
+                      newSpecial.validityMode === 'range'
+                        ? 'bg-cyan-500 text-white hover:bg-cyan-600'
+                        : 'border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10'
+                    }
+                  >
+                    Date range
+                  </Button>
                 </div>
+                {newSpecial.validityMode === 'range' && (
+                  <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <Input
+                      type="date"
+                      name="startDate"
+                      value={newSpecial.startDate}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+                    <Input
+                      type="date"
+                      name="endDate"
+                      value={newSpecial.endDate}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+                  </div>
+                )}
               </div>
 
               <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -534,6 +582,16 @@ export default function Specials() {
                     className="min-h-12 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
                   >
                     Cancel
+                  </Button>
+                )}
+                {editingId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDeleteCandidate({ id: editingId, name: newSpecial.name })}
+                    className="min-h-12 rounded-xl border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-white"
+                  >
+                    Delete
                   </Button>
                 )}
               </div>
@@ -666,15 +724,6 @@ export default function Specials() {
                           className="border-white/10 bg-white/5 text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
                         >
                           <FaEdit />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon-sm"
-                          onClick={() => setDeleteCandidate(special)}
-                          className="border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-white"
-                        >
-                          <FaTrashAlt />
                         </Button>
                       </div>
                     </div>
