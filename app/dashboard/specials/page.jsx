@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { FaCalendarAlt, FaEdit, FaStar } from 'react-icons/fa';
+import { FaCalendarAlt, FaStar } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -92,6 +92,7 @@ export default function Specials() {
   const [isLoading, setIsLoading] = useState(false);
 
   const authUser = getAuth().currentUser;
+  const isEditing = Boolean(editingId);
 
   const specials = useMemo(
     () =>
@@ -327,13 +328,13 @@ export default function Specials() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-white md:text-base">
-                  {editingId ? 'Edit special' : 'Create special'}
+                  {isEditing ? 'Edit special' : 'Create special'}
                 </h2>
                 <p className="mt-1 text-[11px] text-neutral-400 md:text-xs">
                   Keep the form focused on one offer at a time.
                 </p>
               </div>
-              {editingId && (
+              {isEditing && (
                 <Button
                   type="button"
                   variant="outline"
@@ -598,9 +599,9 @@ export default function Specials() {
                   disabled={isLoading}
                   className="min-h-12 flex-1 rounded-xl bg-cyan-500 text-white hover:bg-cyan-600"
                 >
-                  {isLoading ? 'Saving...' : editingId ? 'Update special' : 'Add special'}
+                  {isLoading ? 'Saving...' : isEditing ? 'Save changes' : 'Create special'}
                 </Button>
-                {editingId && (
+                {isEditing && (
                   <Button
                     type="button"
                     variant="outline"
@@ -610,7 +611,7 @@ export default function Specials() {
                     Cancel
                   </Button>
                 )}
-                {editingId && (
+                {isEditing && (
                   <Button
                     type="button"
                     variant="outline"
@@ -698,11 +699,10 @@ export default function Specials() {
                         <Button
                           type="button"
                           variant="outline"
-                          size="icon-sm"
                           onClick={() => handleStartEdit(special)}
-                          className="border-white/10 bg-white/5 text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
+                          className="min-h-9 rounded-xl border-white/10 bg-white/5 px-3 text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100"
                         >
-                          <FaEdit />
+                          Edit
                         </Button>
                       </div>
                     </div>

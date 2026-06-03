@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { collection, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { FaEdit, FaPlus } from 'react-icons/fa';
+import { FaPlus } from 'react-icons/fa';
 import db from '../../../utils/firebase';
 import { getAuth } from 'firebase/auth';
 import { getStoreId } from '../../../utils/storeId';
@@ -24,6 +24,7 @@ export default function Categories() {
     const { notification, notify, clearNotification } = useToastNotification();
     const categories = [...categoriesData].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const { hasAuditActor, getAuditActor } = useAuditActor();
+    const isEditing = Boolean(editingCategoryId);
 
     useEffect(() => {
         if (categoriesError) {
@@ -145,7 +146,7 @@ export default function Categories() {
                 <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
                     <section className="min-h-0 rounded-3xl border border-white/10 bg-neutral-900/70 p-4 shadow-xl backdrop-blur-xl md:p-5">
                         <form onSubmit={handleSubmit} className="h-full min-h-0 space-y-4 overflow-y-auto pr-1 text-sm">
-                            <h2 className="text-base font-semibold text-white">{editingCategoryId ? 'Edit Category' : 'Add New Category'}</h2>
+                            <h2 className="text-base font-semibold text-white">{isEditing ? 'Edit category' : 'Create category'}</h2>
                             <input
                                 type="text" name="name" value={newCategory.name} onChange={handleChange}
                                 placeholder="Category Name" className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-white placeholder-neutral-500 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25" required
@@ -179,14 +180,14 @@ export default function Categories() {
                             </div>
                             <div className="flex flex-wrap gap-2 pt-2">
                                 <button type="submit" disabled={isLoading} className="min-h-11 flex-grow rounded-2xl bg-blue-500 px-4 text-sm font-semibold text-white hover:bg-blue-600 disabled:bg-neutral-600">
-                                    {isLoading ? 'Saving...' : (editingCategoryId ? 'Update Category' : 'Add Category')}
+                                    {isLoading ? 'Saving...' : (isEditing ? 'Save changes' : 'Create category')}
                                 </button>
-                                {editingCategoryId && (
+                                {isEditing && (
                                     <button type="button" onClick={resetForm} className="min-h-11 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-medium text-white hover:bg-white/15">
                                         Cancel
                                     </button>
                                 )}
-                                {editingCategoryId && (
+                                {isEditing && (
                                     <button
                                         type="button"
                                         onClick={() => setShowDeleteConfirm(true)}
@@ -218,7 +219,7 @@ export default function Categories() {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => handleStartEdit(category)} className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-blue-300 hover:bg-white/15"><FaEdit /></button>
+                                    <button onClick={() => handleStartEdit(category)} className="min-h-8 rounded-xl border border-white/10 bg-white/10 px-3 text-sm text-blue-300 hover:bg-white/15">Edit</button>
                                 </div>
                             </div>
                         ))}
