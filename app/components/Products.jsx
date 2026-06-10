@@ -58,6 +58,11 @@ const VarietySelectionModal = ({ product, onOpenChange, onSelectVariety }) => {
   const [selectedVariety, setSelectedVariety] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
 
+  useEffect(() => {
+    setSelectedVariety(null);
+    setIsAdding(false);
+  }, [product?.id]);
+
   if (!product || !product.varietyPrices) return null;
 
   const varieties = Object.entries(product.varietyPrices).sort((a, b) => a[1] - b[1]);
