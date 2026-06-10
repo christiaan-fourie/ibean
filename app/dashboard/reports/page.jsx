@@ -14,13 +14,16 @@ import {
 import {
     aggregateSalesReconciliation,
     aggregateSpecialsBreakdown,
+    getSaleNetTotal,
     sumAggregateProductTotals,
 } from '../../../utils/pricing';
 import { CHILLZONE_STORES } from '../../../utils/stores';
 import { buildReportsPdfBlob } from './reportPdf';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Clipboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useToastNotification } from '../../hooks/useToastNotification';
+import ToastNotification from '../../components/ToastNotification';
 import {
     Select,
     SelectContent,
@@ -57,6 +60,64 @@ const formatTransactionItem = (item) => {
 };
 
 const getTransactionItems = (sale) => (Array.isArray(sale?.items) ? sale.items.map(formatTransactionItem) : []);
+
+const paymentBucket = (method) => {
+    const normalized = (method || 'unknown').toLowerCase();
+    if (normalized === 'cash') return 'Cash';
+    if (normalized === 'card') return 'Card';
+    if (normalized === 'snapscan') return 'Snapscan';
+    return 'Other';
+};
+
+const formatChatMoney = (amount) => {
+    const numeric = Number(amount) || 0;
+    const formatted = numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    return `R${formatted}`;
+};
+
+const buildGChatExportText = (sales, scopeLabel) => {
+    const paymentTotals = {
+        Cash: 0,
+        Card: 0,
+        Snapscan: 0,
+        Other: 0,
+    };
+    const itemsByLabel = new Map();
+
+    (sales || []).forEach((sale) => {
+        const bucket = paymentBucket(sale?.payment?.method);
+        paymentTotals[bucket] += getSaleNetTotal(sale);
+
+        getTransactionItems(sale).forEach((item) => {
+            const current = itemsByLabel.get(item.label) || { label: item.label, quantity: 0 };
+            current.quantity += Number(item.quantity) || 0;
+            itemsByLabel.set(item.label, current);
+        });
+    });
+
+    const lines = [scopeLabel || ''];
+
+    ['Card', 'Cash', 'Snapscan', 'Other'].forEach((method) => {
+        const total = paymentTotals[method];
+        if (total > 0) {
+            lines.push(`${method}: ${formatChatMoney(total)}`);
+        }
+    });
+
+    if (itemsByLabel.size > 0) {
+        lines.push('');
+        itemsByLabel.forEach((item) => {
+            lines.push(`${item.label} x${item.quantity}`);
+        });
+    }
+
+    lines.push('');
+    lines.push(`Total ${formatChatMoney(
+        Object.values(paymentTotals).reduce((sum, amount) => sum + amount, 0)
+    )}`);
+
+    return lines.join('\n');
+};
 
 const sortRows = (rows, tableKey, sortKey, direction, accessors) => {
     const accessor = accessors[tableKey]?.[sortKey];
@@ -103,6 +164,7 @@ const TableHeader = ({ children, sortState, sortKey, tableKey, onSort, defaultDi
 
 export default function Reports() {
     const { user, staffAuth, isSessionReady } = useDashboardSession();
+    const { notification, notify, clearNotification } = useToastNotification();
     const salesLive = useCollectionLive('sales');
     const productsLive = useCollectionLive('products');
     const specialsLive = useCollectionLive('specials');
@@ -426,6 +488,32 @@ export default function Reports() {
         sortedSpecialsRows,
     ]);
 
+    const gChatExportText = useMemo(
+        () => buildGChatExportText(filteredData.sales, scopeStoreLabel),
+        [filteredData.sales, scopeStoreLabel]
+    );
+
+    const copyGChatExport = async () => {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(gChatExportText);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = gChatExportText;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+            notify('gChat text copied to clipboard.', 'success');
+        } catch {
+            notify('Failed to copy gChat text.', 'error');
+        }
+    };
+
     const handleStoreChange = (value) => setSelectedStore(value);
     const handleDateChange = (e, type) => setDateRange(prev => ({ ...prev, [type]: e.target.value }));
     const applyPreset = (preset) => {
@@ -562,15 +650,35 @@ export default function Reports() {
                                     {new Date(dateRange.start + 'T00:00:00').toLocaleDateString()} - {new Date(dateRange.end + 'T00:00:00').toLocaleDateString()}
                                 </p>
                             </div>
-                            <Button
-                                onClick={handleExportToPdf}
-                                className="mt-3 h-11 w-full rounded-2xl bg-green-600 text-white shadow-md hover:bg-green-700 focus-visible:ring-green-500/30"
-                                disabled={loading}
-                            >
-                                {loading ? 'Generating...' : 'Export to PDF'}
-                            </Button>
+                            <div className="mt-3 grid gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={copyGChatExport}
+                                    className="h-11 w-full justify-start gap-2 rounded-2xl border-white/10 bg-neutral-900/70 text-neutral-200 hover:border-white/15 hover:bg-white/5 hover:text-white"
+                                    disabled={loading}
+                                >
+                                    <Clipboard className="h-4 w-4" aria-hidden="true" />
+                                    Copy gChat
+                                </Button>
+                                <Button
+                                    onClick={handleExportToPdf}
+                                    className="h-11 w-full rounded-2xl bg-green-600 text-white shadow-md hover:bg-green-700 focus-visible:ring-green-500/30"
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Generating...' : 'Export to PDF'}
+                                </Button>
+                            </div>
                         </section>
                     </div>
+                    {notification.message && (
+                        <ToastNotification
+                            message={notification.message}
+                            type={notification.type}
+                            onClose={clearNotification}
+                            duration={2500}
+                        />
+                    )}
                         {error && (<div className="mt-4 rounded-2xl border border-red-500/40 bg-red-600/20 p-3 text-sm text-white">{error}</div>)}
                         {loading && (<div className="mt-4 rounded-2xl border border-blue-500/40 bg-blue-600/20 p-3 text-sm text-white">Loading and processing data... Please wait.</div>)}
                     </div>
