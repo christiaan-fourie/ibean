@@ -371,14 +371,15 @@ const ReportsPdfDocument = ({ report }) => (
       </View>
 
       <Text style={styles.sectionHeader} minPresenceAhead={sectionBreakProps.minPresenceAhead}>
-        Product Sales (gross line subtotals)
+        Product Sales Summary (net)
       </Text>
       <Text style={styles.description} minPresenceAhead={48}>
-        Menu-value totals from items sold before promotions. Product table: {formatMoney(report.productTotalsSum)} · Gross reconciliation: {formatMoney(report.salesReconciliation.gross)} · Net after promotions: {formatMoney(report.salesReconciliation.net)}.
+        Sold item line totals with specials subtracted only when the discounted product is known. Product table: {formatMoney(report.productTotalsSum)} · Net sales after all promotions: {formatMoney(report.salesReconciliation.net)}.
       </Text>
       <View style={styles.table}>
         <View style={styles.row} {...tableRowProps}>
           <Text style={styles.headerCell}>Item</Text>
+          <Text style={styles.headerCell}>Qty</Text>
           <Text style={styles.headerCell}>Cash</Text>
           <Text style={styles.headerCell}>Card</Text>
           <Text style={styles.headerCell}>SnapScan</Text>
@@ -388,6 +389,7 @@ const ReportsPdfDocument = ({ report }) => (
         {report.productRows.map((row, index) => (
           <View key={row.Product || index} style={index % 2 === 0 ? styles.row : styles.rowAlt} {...tableRowProps}>
             <Text style={styles.cell}>{row.Product}</Text>
+            <Text style={styles.cell}>{row.Qty}</Text>
             <Text style={styles.cell}>{formatMoney(row.Cash)}</Text>
             <Text style={styles.cell}>{formatMoney(row.Card)}</Text>
             <Text style={styles.cell}>{formatMoney(row.Snapscan)}</Text>

@@ -1,4 +1,4 @@
-import { parseMoney, roundMoney } from './money';
+import { fromCents, parseMoney, roundMoney, toCents } from './money';
 
 /** Gross line amount from stored item (prefers subtotal, else price × qty). */
 export function getLineGross(item) {
@@ -53,39 +53,68 @@ export function getSaleTotalDiscount(sale) {
 }
 
 /**
- * Allocate sale net revenue across line items pro-rata by gross subtotal.
- * Sum of returned nets matches getSaleNetTotal(sale) (within rounding).
+ * Net revenue per line item.
+ * Starts from actual line subtotal and only subtracts discounts that can be
+ * tied back to a matching reward product. Generic sale-level discounts are
+ * kept out of product rows so product prices are not distorted.
  */
 export function allocateNetToLineItems(sale) {
   const items = sale?.items || [];
   if (items.length === 0) return [];
 
-  const lines = items.map((item, index) => ({
-    index,
-    name: item.name || 'Unknown Product',
-    gross: getLineGross(item),
-  }));
+  const lines = items.map((item, index) => {
+    const quantity = parseInt(item?.quantity, 10);
+    const gross = getLineGross(item);
+    return {
+      index,
+      id: item.id || '',
+      name: item.name || 'Unknown Product',
+      category: item.category || '',
+      size: item.size || '',
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      gross,
+      grossCents: toCents(gross),
+      netCents: toCents(gross),
+    };
+  });
 
-  const grossTotal = roundMoney(lines.reduce((sum, line) => sum + line.gross, 0));
-  const netTotal = getSaleNetTotal(sale);
+  for (const special of sale?.appliedSpecials || []) {
+    const discountCents = toCents(special?.savedAmount);
+    if (discountCents <= 0) continue;
 
-  if (grossTotal <= 0) {
-    return lines.map((line) => ({ ...line, net: 0 }));
-  }
+    const productId = special.rewardProduct || special.triggerProduct || '';
+    const category = special.rewardCategory || special.triggerCategory || '';
+    const requiredSize = special.rewardProductSize ||
+      special.rewardCategorySize ||
+      special.triggerProductSize ||
+      special.triggerCategorySize ||
+      '';
+    if (!productId && !category) continue;
 
-  const roundedNets = lines.map((line) =>
-    roundMoney((line.gross / grossTotal) * netTotal)
-  );
-  let sum = roundMoney(roundedNets.reduce((a, b) => a + b, 0));
-  const diff = roundMoney(netTotal - sum);
+    const matchingLines = lines.filter((line) => {
+      const itemProductId = String(line.id).split('_')[0];
+      const productMatches = productId && (itemProductId === productId || line.id === productId);
+      const categoryMatches = category && line.category === category;
+      const sizeMatches =
+        !requiredSize ||
+        String(line.size).toLowerCase() === String(requiredSize).toLowerCase();
+      return (productMatches || categoryMatches) && sizeMatches;
+    });
 
-  if (diff !== 0) {
-    let maxIdx = 0;
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i].gross > lines[maxIdx].gross) maxIdx = i;
+    if (matchingLines.length === 0) continue;
+
+    let remainingDiscountCents = Math.min(
+      discountCents,
+      matchingLines.reduce((sum, line) => sum + line.netCents, 0)
+    );
+
+    for (const line of matchingLines) {
+      if (remainingDiscountCents <= 0) break;
+      const lineDiscountCents = Math.min(line.netCents, remainingDiscountCents);
+      line.netCents -= lineDiscountCents;
+      remainingDiscountCents -= lineDiscountCents;
     }
-    roundedNets[maxIdx] = roundMoney(roundedNets[maxIdx] + diff);
   }
 
-  return lines.map((line, i) => ({ ...line, net: roundedNets[i] }));
+  return lines.map(({ grossCents, ...line }) => ({ ...line, net: fromCents(line.netCents) }));
 }

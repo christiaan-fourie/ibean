@@ -331,6 +331,7 @@ export default function Reports() {
             {
                 products: {
                     Product: (row) => row.Product || '',
+                    Qty: (row) => row.Qty || 0,
                     Cash: (row) => row.Cash || 0,
                     Card: (row) => row.Card || 0,
                     Snapscan: (row) => row.Snapscan || 0,
@@ -739,7 +740,7 @@ export default function Reports() {
                                 </summary>
                                 <div className="border-t border-white/10">
                                     <p className="px-3 pb-2 pt-3 text-[11px] text-neutral-400 sm:text-xs">
-                                        Allocated from sale totals, so the table sums to net sales R{salesReconciliation.net.toFixed(2)}. Net product total R{sumAggregateProductTotals(salesTotals).toFixed(2)}.
+                                        Product rows use sold item line totals and subtract specials only when the discounted product is known. Product total R{sumAggregateProductTotals(salesTotals).toFixed(2)}. Net sales after all promotions R{salesReconciliation.net.toFixed(2)}.
                                     </p>
                                     {sortedProductRows.length > 0 ? (
                                         <div className="overflow-x-auto">
@@ -747,6 +748,7 @@ export default function Reports() {
                                                 <thead>
                                                     <tr className="bg-neutral-900/70">
                                                         <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Product" sortState={tableSorts.products} onSort={handleTableSort}>Product</TableHeader></th>
+                                                        <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Qty" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Qty</TableHeader></th>
                                                         <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Cash" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Cash</TableHeader></th>
                                                         <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Card" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">Card</TableHeader></th>
                                                         <th className="px-2 py-2 text-left sm:px-4"><TableHeader tableKey="products" sortKey="Snapscan" sortState={tableSorts.products} onSort={handleTableSort} defaultDirection="desc">SnapScan</TableHeader></th>
@@ -758,6 +760,7 @@ export default function Reports() {
                                                     {sortedProductRows.map((sale, index) => (
                                                         <tr key={index} className="border-b border-white/10 hover:bg-white/5">
                                                             <td className="px-2 py-1.5 text-neutral-200 sm:px-4 sm:py-2">{sale.Product}</td>
+                                                            <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">{sale.Qty}</td>
                                                             <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Cash.toFixed(2)}</td>
                                                             <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Card.toFixed(2)}</td>
                                                             <td className="px-2 py-1.5 text-neutral-300 sm:px-4 sm:py-2">R{sale.Snapscan.toFixed(2)}</td>

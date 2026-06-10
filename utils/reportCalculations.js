@@ -1,5 +1,6 @@
 import { aggregateProductPaymentTotals } from './pricing/aggregateSales';
 import { allocateNetToLineItems, getSaleNetTotal } from './pricing/saleAmounts';
+import { fromCents, toCents } from './pricing/money';
 
 function paymentBucket(method) {
     const normalized = (method || 'unknown').toLowerCase();
@@ -28,24 +29,38 @@ export function calculateProductNetTotals(salesData) {
             if (!productTotals[name]) {
                 productTotals[name] = {
                     Product: name,
+                    Qty: 0,
                     Cash: 0,
                     Card: 0,
                     Snapscan: 0,
                     Other: 0,
                     Total: 0,
+                    _cashCents: 0,
+                    _cardCents: 0,
+                    _snapscanCents: 0,
+                    _otherCents: 0,
+                    _totalCents: 0,
                 };
             }
-            productTotals[name][bucket] += net;
-            productTotals[name].Total += net;
+            const cents = Number.isInteger(line.netCents) ? line.netCents : toCents(net);
+            const centsKey = `_${bucket.toLowerCase()}Cents`;
+            productTotals[name].Qty += line.quantity || 0;
+            productTotals[name][centsKey] += cents;
+            productTotals[name]._totalCents += cents;
         }
     }
 
     Object.values(productTotals).forEach((row) => {
-        row.Cash = Number(row.Cash.toFixed(2));
-        row.Card = Number(row.Card.toFixed(2));
-        row.Snapscan = Number(row.Snapscan.toFixed(2));
-        row.Other = Number(row.Other.toFixed(2));
-        row.Total = Number(row.Total.toFixed(2));
+        row.Cash = fromCents(row._cashCents);
+        row.Card = fromCents(row._cardCents);
+        row.Snapscan = fromCents(row._snapscanCents);
+        row.Other = fromCents(row._otherCents);
+        row.Total = fromCents(row._totalCents);
+        delete row._cashCents;
+        delete row._cardCents;
+        delete row._snapscanCents;
+        delete row._otherCents;
+        delete row._totalCents;
     });
 
     return productTotals;
